@@ -1,9 +1,11 @@
 'use client';
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ESCANDALLO_USAGE_UNIT_PRESETS, validateEscandalloUsageUnitInput } from '@/lib/escandallo-ingredient-units';
-import { ChevronDown, GitCompare, LineChart, RefreshCw, Search, Star } from 'lucide-react';
+import { ChevronDown, Eye, FileImage, FileText, GitCompare, LineChart, Paperclip, RefreshCw, Search, Star, Trash2 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { computeCosteUnitarioUsoEur } from '@/lib/purchase-article-internal-cost';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -14,10 +16,17 @@ import {
   fetchSupplierCatalogRowsForArticleIds,
   isMissingPurchaseArticlesError,
   setPurchaseArticleActivo,
+  updatePurchaseArticleTechnicalFileFields,
   updatePurchaseArticleMasterCostFields,
   type PurchaseArticle,
   type SupplierCatalogRow,
 } from '@/lib/purchase-articles-supabase';
+import {
+  createPurchaseArticleDocumentSignedUrl,
+  deletePurchaseArticleDocument,
+  uploadPurchaseArticleDocument,
+  validatePurchaseArticleDocument,
+} from '@/lib/purchase-article-documents-storage';
 import {
   fetchSupplierProductPriceSamples,
   type SupplierProductPriceSample,
@@ -35,6 +44,13 @@ function formatShortDate(iso: string) {
   } catch {
     return iso;
   }
+}
+
+function formatFileSize(bytes: number | null | undefined): string {
+  const value = Number(bytes ?? 0);
+  if (!Number.isFinite(value) || value <= 0) return '—';
+  if (value < 1024 * 1024) return `${(value / 1024).toLocaleString('es-ES', { maximumFractionDigits: 1 })} KB`;
+  return `${(value / (1024 * 1024)).toLocaleString('es-ES', { maximumFractionDigits: 1 })} MB`;
 }
 
 export default function PedidosArticulosPage() {
@@ -336,6 +352,10 @@ function ArticleCard({
   const [activoErr, setActivoErr] = useState<string | null>(null);
   const [masterBusy, setMasterBusy] = useState(false);
   const [masterMsg, setMasterMsg] = useState<string | null>(null);
+  const [docBusy, setDocBusy] = useState(false);
+  const [docMsg, setDocMsg] = useState<string | null>(null);
+  const [docPreviewUrl, setDocPreviewUrl] = useState<string | null>(null);
+  const [imageViewerUrl, setImageViewerUrl] = useState<string | null>(null);
   const [refProdId, setRefProdId] = useState(
     () => a.referenciaPrincipalSupplierProductId ?? a.createdFromSupplierProductId ?? '',
   );
@@ -371,6 +391,10 @@ function ArticleCard({
   ]);
 
   const isCc = a.origenArticulo === 'cocina_central';
+  const technicalPath = a.technicalFileUrl?.trim() || null;
+  const technicalType = a.technicalFileType?.trim() || null;
+  const isTechnicalImage = Boolean(technicalType && technicalType.startsWith('image/'));
+  const technicalLabel = a.technicalFileName?.trim() || 'Documento adjunto';
 
   const isDirty =
     refProdId !== (a.referenciaPrincipalSupplierProductId ?? a.createdFromSupplierProductId ?? '') ||
@@ -385,6 +409,25 @@ function ArticleCard({
     onDirtyChange(isDirty);
     return () => onDirtyChange(false);
   }, [isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    setDocPreviewUrl(null);
+    setImageViewerUrl(null);
+    if (!expanded || !isTechnicalImage || !technicalPath || !localId || !supabaseOk) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let cancelled = false;
+    void createPurchaseArticleDocumentSignedUrl(supabase, technicalPath)
+      .then((url) => {
+        if (!cancelled) setDocPreviewUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setDocPreviewUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, isTechnicalImage, technicalPath, localId, supabaseOk]);
 
   const applyActivo = async (next: boolean) => {
     if (!localId || !supabaseOk) return;
@@ -565,6 +608,88 @@ function ArticleCard({
       setMasterMsg(e instanceof Error ? e.message : 'No se pudo guardar. Inténtalo de nuevo.');
     } finally {
       setMasterBusy(false);
+    }
+  };
+
+  const handleUploadTechnicalDocument = async (file: File) => {
+    if (!localId || !supabaseOk) return;
+    const validationError = validatePurchaseArticleDocument(file);
+    if (validationError) {
+      setDocMsg(validationError);
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setDocBusy(true);
+    setDocMsg(null);
+    let uploadedPath: string | null = null;
+    const previousPath = technicalPath;
+    try {
+      const uploaded = await uploadPurchaseArticleDocument(supabase, localId, a.id, file);
+      uploadedPath = uploaded.storagePath;
+      await updatePurchaseArticleTechnicalFileFields(supabase, localId, a.id, {
+        technicalFileUrl: uploaded.storagePath,
+        technicalFileName: uploaded.fileName,
+        technicalFileType: uploaded.fileType,
+        technicalFileSize: uploaded.fileSize,
+      });
+      if (previousPath && previousPath !== uploaded.storagePath) {
+        await deletePurchaseArticleDocument(supabase, previousPath).catch(() => {});
+      }
+      onReload();
+    } catch (e: unknown) {
+      if (uploadedPath) {
+        await deletePurchaseArticleDocument(supabase, uploadedPath).catch(() => {});
+      }
+      setDocMsg(e instanceof Error ? e.message : 'No se pudo guardar el documento.');
+    } finally {
+      setDocBusy(false);
+    }
+  };
+
+  const handleDeleteTechnicalDocument = async () => {
+    if (!localId || !supabaseOk || !technicalPath) return;
+    if (!window.confirm('¿Eliminar el archivo adjunto de este artículo?')) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setDocBusy(true);
+    setDocMsg(null);
+    try {
+      await updatePurchaseArticleTechnicalFileFields(supabase, localId, a.id, {
+        technicalFileUrl: null,
+        technicalFileName: null,
+        technicalFileType: null,
+        technicalFileSize: null,
+      });
+      await deletePurchaseArticleDocument(supabase, technicalPath).catch(() => {});
+      setDocPreviewUrl(null);
+      setImageViewerUrl(null);
+      onReload();
+    } catch (e: unknown) {
+      setDocMsg(e instanceof Error ? e.message : 'No se pudo eliminar el documento.');
+    } finally {
+      setDocBusy(false);
+    }
+  };
+
+  const handleOpenTechnicalDocument = async () => {
+    if (!technicalPath || !localId || !supabaseOk) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setDocBusy(true);
+    setDocMsg(null);
+    try {
+      const signedUrl = await createPurchaseArticleDocumentSignedUrl(supabase, technicalPath);
+      if (isTechnicalImage) {
+        setDocPreviewUrl(signedUrl);
+        setImageViewerUrl(signedUrl);
+      } else {
+        window.open(signedUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch (e: unknown) {
+      setDocMsg(e instanceof Error ? e.message : 'No se pudo abrir el documento.');
+    } finally {
+      setDocBusy(false);
     }
   };
 
@@ -803,6 +928,100 @@ function ArticleCard({
           </section>
 
           <section className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80">
+            <h3 className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
+              <Paperclip className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
+              Técnica y documentación
+            </h3>
+            {docMsg ? (
+              <p className="mt-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-950">
+                {docMsg}
+              </p>
+            ) : null}
+            {!technicalPath ? (
+              <div className="mt-2 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/80 px-3 py-4 text-center">
+                <p className="text-[12px] font-semibold text-zinc-500">No hay archivos adjuntos</p>
+                <label className="mt-3 inline-flex h-9 cursor-pointer items-center justify-center rounded-xl bg-white px-3 text-[11px] font-black text-zinc-900 ring-1 ring-zinc-200 transition hover:bg-zinc-50">
+                  Añadir imagen o PDF
+                  <input
+                    type="file"
+                    accept="application/pdf,image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    disabled={docBusy}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      void handleUploadTechnicalDocument(file);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="mt-2 rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-2.5 ring-1 ring-zinc-100">
+                <div className="flex items-start gap-3">
+                  {isTechnicalImage ? (
+                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-zinc-200/70">
+                      {docPreviewUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={docPreviewUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="grid h-full w-full place-items-center text-zinc-400">
+                          <FileImage className="h-5 w-5" aria-hidden />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid h-16 w-16 shrink-0 place-items-center rounded-xl bg-white text-zinc-500 ring-1 ring-zinc-200/70">
+                      <FileText className="h-6 w-6" aria-hidden />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12px] font-black text-zinc-950">{technicalLabel}</p>
+                    <p className="mt-1 text-[11px] font-semibold text-zinc-500">
+                      {technicalType === 'application/pdf' ? 'PDF' : 'Imagen'} · {formatFileSize(a.technicalFileSize)}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={docBusy}
+                    onClick={() => void handleOpenTechnicalDocument()}
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white px-2.5 text-[10px] font-black text-zinc-900 ring-1 ring-zinc-200 transition hover:bg-zinc-50 disabled:opacity-50"
+                  >
+                    <Eye className="h-3.5 w-3.5" aria-hidden />
+                    Ver
+                  </button>
+                  <label className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg bg-white px-2.5 text-[10px] font-black text-zinc-900 ring-1 ring-zinc-200 transition hover:bg-zinc-50">
+                    Sustituir
+                    <input
+                      type="file"
+                      accept="application/pdf,image/jpeg,image/png,image/webp"
+                      className="sr-only"
+                      disabled={docBusy}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        void handleUploadTechnicalDocument(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={docBusy}
+                    onClick={() => void handleDeleteTechnicalDocument()}
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-black text-[#D32F2F] transition hover:bg-[#D32F2F]/5 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80">
             <h3 className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
               Impacto en ficha técnica
             </h3>
@@ -924,6 +1143,32 @@ function ArticleCard({
           </section>
         </div>
       </details>
+      {imageViewerUrl ? (
+        <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/60 p-3 sm:items-center sm:p-6" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            aria-label="Cerrar imagen"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setImageViewerUrl(null)}
+          />
+          <div className="relative w-full max-w-md overflow-hidden rounded-[1.4rem] bg-white p-2 shadow-2xl ring-1 ring-zinc-200">
+            <div className="flex items-center justify-between gap-2 px-1 pb-2">
+              <p className="min-w-0 truncate text-[12px] font-black text-zinc-900">{technicalLabel}</p>
+              <button
+                type="button"
+                onClick={() => setImageViewerUrl(null)}
+                className="inline-flex h-8 items-center justify-center rounded-lg px-2 text-[10px] font-black text-zinc-500 hover:bg-zinc-100"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="overflow-hidden rounded-[1.1rem] bg-zinc-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imageViewerUrl} alt={technicalLabel} className="max-h-[70vh] w-full object-contain" />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </li>
   );
 }

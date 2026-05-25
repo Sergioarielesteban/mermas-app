@@ -36,6 +36,8 @@ import {
 } from '@/lib/escandallos-analytics';
 import {
   fetchEscandalloTechnicalSheetWithSteps,
+  fetchEscandalloTechnicalSheetsMap,
+  getOfficialRecipePhotoUrl,
   type EscandalloTechnicalSheet,
   type EscandalloTechnicalSheetStep,
 } from '@/lib/escandallos-technical-sheet-supabase';
@@ -344,6 +346,7 @@ function RecipeMetric({
 
 function RecipeCard({
   r,
+  photoUrl,
   actionHref,
   updatedLabel,
   onRefresh,
@@ -351,6 +354,7 @@ function RecipeCard({
   printing = false,
 }: {
   r: EscandalloRecipeDashboardRow;
+  photoUrl?: string | null;
   actionHref?: string;
   updatedLabel?: string;
   onRefresh?: () => void;
@@ -364,6 +368,16 @@ function RecipeCard({
   return (
     <article className="group rounded-xl border border-[rgba(10,9,8,0.06)] bg-white px-2.5 py-2 shadow-[0_1px_0_rgba(10,9,8,0.04)] transition-[box-shadow,transform] active:scale-[0.995] hover:shadow-[0_2px_10px_rgba(10,9,8,0.05)]">
       <div className="flex items-start gap-2">
+        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-[16px] bg-[#FAFAF9] ring-1 ring-[rgba(10,9,8,0.06)]">
+          {photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photoUrl} alt="" className="h-full w-full object-cover [aspect-ratio:1/1]" />
+          ) : (
+            <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle_at_top,_rgba(211,47,47,0.08),_transparent_60%)] text-center">
+              <span className="px-1 text-[7px] font-bold uppercase tracking-[0.14em] text-[#7E7468]">Sin foto</span>
+            </div>
+          )}
+        </div>
         <Badge tone={badgeTone} dense>
           {statusBadgeLabel(r.bucket)}
         </Badge>
@@ -444,6 +458,7 @@ export default function EscandallosPage() {
   const [linesByRecipe, setLinesByRecipe] = useState<Record<string, EscandalloLine[]>>({});
   const [rawProducts, setRawProducts] = useState<EscandalloRawProduct[]>([]);
   const [processedProducts, setProcessedProducts] = useState<EscandalloProcessedProduct[]>([]);
+  const [technicalSheetsByRecipe, setTechnicalSheetsByRecipe] = useState<Map<string, EscandalloTechnicalSheet>>(new Map());
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [printingRecipeId, setPrintingRecipeId] = useState<string | null>(null);
@@ -491,6 +506,7 @@ export default function EscandallosPage() {
       setLinesByRecipe({});
       setRawProducts([]);
       setProcessedProducts([]);
+      setTechnicalSheetsByRecipe(new Map());
       setLoading(false);
       return;
     }
@@ -502,6 +518,7 @@ export default function EscandallosPage() {
       setLinesByRecipe(pack.linesByRecipe);
       setRawProducts(pack.rawProducts);
       setProcessedProducts(pack.processed);
+      setTechnicalSheetsByRecipe(new Map());
       setFamilyByRecipeId(
         new Map(
           pack.recipes
@@ -519,15 +536,17 @@ export default function EscandallosPage() {
     setLoading(true);
     setBanner(null);
     try {
-      const [r, raw, processed, categoryMap] = await Promise.all([
+      const [r, raw, processed, categoryMap, sheetsMapResult] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloRecipeCategoriasMap(supabase, localId),
+        fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
       ]);
       setRecipes(r);
       setRawProducts(raw);
       setProcessedProducts(processed);
+      setTechnicalSheetsByRecipe(sheetsMapResult);
       setFamilyByRecipeId(categoryMap);
       const linesEntries = await Promise.all(r.map(async (recipe) => [recipe.id, await fetchEscandalloLines(supabase, localId, recipe.id)] as const));
       setLinesByRecipe(Object.fromEntries(linesEntries));
@@ -535,6 +554,7 @@ export default function EscandallosPage() {
       setBanner(e instanceof Error ? e.message : 'No se pudieron cargar datos. Revisa conexión y migraciones de escandallos.');
       setRecipes([]);
       setLinesByRecipe({});
+      setTechnicalSheetsByRecipe(new Map());
     } finally {
       setLoading(false);
     }
@@ -928,6 +948,7 @@ export default function EscandallosPage() {
                     <RecipeCard
                       key={r.id}
                       r={r}
+                      photoUrl={getOfficialRecipePhotoUrl(technicalSheetsByRecipe.get(r.id))}
                       actionHref={`/escandallos/recetas/${r.id}/editar`}
                       updatedLabel={formatRecipeUpdatedLabel(recipeUpdatedById.get(r.id))}
                       onRefresh={() => void load()}

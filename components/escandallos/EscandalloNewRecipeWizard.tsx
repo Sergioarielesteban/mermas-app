@@ -138,7 +138,6 @@ export default function EscandalloNewRecipeWizard() {
   const [operationalUnit, setOperationalUnit] = useState<EscandalloYieldUnit>('g');
   const [ingredientDrafts, setIngredientDrafts] = useState<IngredientDraftRow[]>([emptyIngredientDraft()]);
   const [recipeKind, setRecipeKind] = useState<RecipeKind>('plato');
-  const [photoPreview, setPhotoPreview] = useState('');
   const [familyName, setFamilyName] = useState('');
   const [familyOptions, setFamilyOptions] = useState<string[]>([]);
   const [openBlock, setOpenBlock] = useState<string | null>(null);
@@ -279,17 +278,17 @@ export default function EscandalloNewRecipeWizard() {
       setLoading(true);
     }
     try {
-      const [r, raw, processed, categoryMap, sheetsMap] = await Promise.all([
+      const [r, raw, processed, categoryMap, sheetsMapResult] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloRecipeCategoriasMap(supabase, localId),
-        fetchEscandalloTechnicalSheetsMap(supabase, localId),
+        fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
       ]);
       setRecipes(r);
       setRawProducts(raw);
       setProcessedProducts(processed);
-      setTechnicalSheetsByRecipe(sheetsMap);
+      setTechnicalSheetsByRecipe(sheetsMapResult);
       setFamilyOptions(
         [...new Set([...categoryMap.values()].map((value) => value.trim()).filter(Boolean))].sort((a, b) =>
           a.localeCompare(b, 'es'),
@@ -397,7 +396,7 @@ export default function EscandalloNewRecipeWizard() {
 
   const buildTechnicalPatch = (): EscandalloTechnicalSheetUpdate => ({
     categoria: isPlateRecipe ? familyName.trim() : '',
-    fotoUrl: photoPreview.trim() === '' ? null : photoPreview.trim(),
+    fotoUrl: isPlateRecipe && emplFoto.trim() !== '' ? emplFoto.trim() : null,
     activa: true,
     rendimientoTotal: rendimientoTotal.trim(),
     numeroRaciones: parseOptDecimal(numeroRaciones),
@@ -509,7 +508,7 @@ export default function EscandalloNewRecipeWizard() {
     );
   }
 
-  const readImageFile = (file: File, onReady: (dataUrl: string) => void = setPhotoPreview) => {
+  const readImageFile = (file: File, onReady: (dataUrl: string) => void) => {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') onReady(reader.result);
@@ -608,31 +607,7 @@ export default function EscandalloNewRecipeWizard() {
               placeholder={namePlaceholder}
               autoFocus
             />
-            <div className="mt-2 grid gap-2 min-[380px]:grid-cols-[5.5rem_minmax(0,1fr)] min-[380px]:items-stretch">
-              <label className="grid min-h-[18rem] cursor-pointer place-items-center rounded-xl border border-dashed border-[rgba(10,9,8,0.14)] bg-[#FAFAF9] text-center text-[9px] font-bold text-[#7E7468] min-[380px]:row-span-3">
-                {photoPreview ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={photoPreview} alt="" className="h-full w-full rounded-xl object-cover" />
-                ) : (
-                  <span className="grid place-items-center gap-1">
-                    <Camera className="h-5 w-5" aria-hidden />
-                    Añadir foto
-                  </span>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    readImageFile(file);
-                    e.target.value = '';
-                  }}
-                />
-              </label>
-
-              <div className="min-w-0 space-y-1.5 min-[380px]:self-stretch">
+            <div className="mt-2 min-w-0 space-y-1.5">
                   <div className={isPlateRecipe ? 'grid gap-1.5 sm:grid-cols-[11rem_1fr_auto]' : 'grid gap-1.5'}>
                     <select
                       value={recipeKind}
@@ -804,7 +779,6 @@ export default function EscandalloNewRecipeWizard() {
                     </div>
                   </>
                 )}
-              </div>
             </div>
 
             <div className="mt-2 grid divide-x divide-[rgba(10,9,8,0.06)] rounded-lg bg-[#FAFAF9] py-1 ring-1 ring-[rgba(10,9,8,0.04)] grid-cols-4">
@@ -1107,10 +1081,34 @@ export default function EscandalloNewRecipeWizard() {
                           />
                         </label>
                         {emplFoto.trim() ? (
-                          <div className="flex items-center gap-2 rounded-lg bg-[#FAFAF9] p-1.5">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={emplFoto.trim()} alt="" className="h-12 w-12 rounded-md object-cover" />
-                            <span className="text-[10px] font-semibold text-[#7E7468]">Foto añadida</span>
+                          <div className="flex items-center gap-3 rounded-xl border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] p-2">
+                            <div className="h-24 w-24 shrink-0 overflow-hidden rounded-[16px] bg-white ring-1 ring-[rgba(10,9,8,0.06)]">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={emplFoto.trim()} alt="" className="h-full w-full object-cover [aspect-ratio:1/1]" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] font-bold text-[#0A0908]">Foto oficial de la receta</p>
+                              <p className="mt-1 text-[10px] font-medium text-[#7E7468]">Se usará en editor, libro, PDF y vista previa.</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <label className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2.5 text-[10px] font-bold text-[#0A0908]">
+                                  Reemplazar
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="sr-only"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      readImageFile(file, setEmplFoto);
+                                      e.target.value = '';
+                                    }}
+                                  />
+                                </label>
+                                <button type="button" onClick={() => setEmplFoto('')} className="inline-flex h-8 items-center justify-center rounded-lg px-2.5 text-[10px] font-bold text-[#D32F2F]">
+                                  Quitar
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         ) : null}
                       </div>

@@ -40,6 +40,7 @@ import type {
   EscandalloTechnicalSheetUpdate,
   TechnicalSheetStepDraft,
 } from '@/lib/escandallos-technical-sheet-supabase';
+import { getOfficialRecipePhotoUrl } from '@/lib/escandallos-technical-sheet-supabase';
 
 function stepDraftKey() {
   return `s-${Math.random().toString(36).slice(2, 11)}`;
@@ -65,7 +66,6 @@ type Props = {
   sheet: EscandalloTechnicalSheet | null;
   steps: EscandalloTechnicalSheetStep[];
   recipeAllergens: RecipeAllergenRow[];
-  familyOptions: string[];
   productionTotalCost: number;
   rawById: Map<string, EscandalloRawProduct>;
   loading: boolean;
@@ -129,7 +129,6 @@ export default function RecipeTechnicalSheetPanel({
   sheet,
   steps,
   recipeAllergens,
-  familyOptions,
   productionTotalCost,
   rawById,
   loading,
@@ -140,9 +139,7 @@ export default function RecipeTechnicalSheetPanel({
   const [creating, setCreating] = useState(false);
   const [openBlocks, setOpenBlocks] = useState<Record<string, boolean>>({});
 
-  const [categoria, setCategoria] = useState('');
   const [codigoInterno, setCodigoInterno] = useState('');
-  const [fotoUrl, setFotoUrl] = useState('');
   const [activa, setActiva] = useState(true);
   const [rendimientoTotal, setRendimientoTotal] = useState('');
   const [numeroRaciones, setNumeroRaciones] = useState('');
@@ -173,9 +170,7 @@ export default function RecipeTechnicalSheetPanel({
 
   useEffect(() => {
     if (!sheet) {
-      setCategoria('');
       setCodigoInterno('');
-      setFotoUrl('');
       setActiva(true);
       setRendimientoTotal('');
       setNumeroRaciones('');
@@ -205,9 +200,7 @@ export default function RecipeTechnicalSheetPanel({
       setStepDrafts([emptyStep()]);
       return;
     }
-    setCategoria(sheet.categoria);
     setCodigoInterno(sheet.codigoInterno);
-    setFotoUrl(sheet.fotoUrl ?? '');
     setActiva(sheet.activa);
     setRendimientoTotal(sheet.rendimientoTotal);
     setNumeroRaciones(sheet.numeroRaciones != null ? String(sheet.numeroRaciones) : '');
@@ -224,7 +217,7 @@ export default function RecipeTechnicalSheetPanel({
     setEmplDesc(sheet.emplatadoDescripcion);
     setEmplDeco(sheet.emplatadoDecoracion);
     setEmplMenaje(sheet.emplatadoMenaje);
-    setEmplFoto(sheet.emplatadoFotoUrl ?? '');
+    setEmplFoto(getOfficialRecipePhotoUrl(sheet) ?? '');
     setTipoCons(sheet.tipoConservacion);
     setTempCons(sheet.temperaturaConservacion);
     setVidaUtil(sheet.vidaUtil);
@@ -295,6 +288,7 @@ export default function RecipeTechnicalSheetPanel({
 
   const handleSave = async () => {
     if (!sheet) return;
+    const officialPhotoUrl = emplFoto.trim() === '' ? null : emplFoto.trim();
     const manualList = alergManual
       .split(/[\n,]+/)
       .map((s) => s.trim())
@@ -304,9 +298,8 @@ export default function RecipeTechnicalSheetPanel({
       .map((d) => ({ titulo: d.titulo, descripcion: d.descripcion }));
     await onSave(
       {
-        categoria: categoria.trim(),
         codigoInterno: codigoInterno.trim(),
-        fotoUrl: fotoUrl.trim() === '' ? null : fotoUrl.trim(),
+        fotoUrl: officialPhotoUrl,
         activa,
         rendimientoTotal: rendimientoTotal.trim(),
         numeroRaciones: parseOptDecimal(numeroRaciones),
@@ -327,7 +320,7 @@ export default function RecipeTechnicalSheetPanel({
         emplatadoDescripcion: emplDesc.trim(),
         emplatadoDecoracion: emplDeco.trim(),
         emplatadoMenaje: emplMenaje.trim(),
-        emplatadoFotoUrl: emplFoto.trim() === '' ? null : emplFoto.trim(),
+        emplatadoFotoUrl: officialPhotoUrl,
         tipoConservacion: tipoCons.trim(),
         temperaturaConservacion: tempCons.trim(),
         vidaUtil: vidaUtil.trim(),
@@ -433,7 +426,7 @@ export default function RecipeTechnicalSheetPanel({
     : 'Sin alérgenos activos';
   const platingSummary = [
     emplDesc.trim() ? 'Montaje' : '',
-    emplFoto.trim() ? 'foto añadida' : '',
+    emplFoto.trim() ? 'foto oficial' : '',
     emplMenaje.trim() ? emplMenaje.trim() : '',
   ].filter(Boolean).join(' · ');
   const observationsCount = [notasChef, puntosCrit, errores, reco].filter((x) => x.trim()).length;
@@ -441,32 +434,6 @@ export default function RecipeTechnicalSheetPanel({
 
   return (
     <div className="space-y-1.5">
-      <section className="rounded-lg border border-[rgba(10,9,8,0.07)] bg-white ring-1 ring-[rgba(10,9,8,0.035)]">
-        <div className="grid gap-1.5 px-2.5 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-[11px] font-black uppercase tracking-wide text-[#0A0908]">Familia de carta</p>
-              <p className="text-[10px] font-medium text-[#7E7468]">Agrupa la receta en la analítica de escandallos.</p>
-            </div>
-          </div>
-          <div className="flex gap-1.5">
-            <input
-              list="escandallo-editor-family-options"
-              value={categoria}
-              onChange={(e) => setCategoria(e.target.value)}
-              className={`${inputCls} min-w-0 flex-1`}
-              placeholder="Burgers, tapas, postres..."
-              aria-label="Familia de carta"
-            />
-            <datalist id="escandallo-editor-family-options">
-              {familyOptions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
-          </div>
-        </div>
-      </section>
-
       <CompactAccordion
         id="production"
         title="Producción"
@@ -772,7 +739,7 @@ export default function RecipeTechnicalSheetPanel({
               </label>
             </div>
             <div className={metricCls}>
-              <span className={labelCls}>Foto emplatado</span>
+              <span className={labelCls}>Foto presentación</span>
               <label className="flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-[rgba(10,9,8,0.16)] bg-[#FAFAF9] px-2 text-[11px] font-bold text-[#0A0908]">
                 <Camera className="h-3.5 w-3.5 text-[#C4531F]" aria-hidden />
                 Subir foto
@@ -790,13 +757,34 @@ export default function RecipeTechnicalSheetPanel({
               </label>
             </div>
             {emplFoto.trim() ? (
-              <div className="flex items-center gap-2 rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] p-1.5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={emplFoto.trim()} alt="" className="h-12 w-12 rounded-md object-cover" />
-                <span className="text-[10px] font-semibold text-[#7E7468]">Foto añadida</span>
-                <button type="button" onClick={() => setEmplFoto('')} className="ml-auto rounded-md px-2 py-1 text-[10px] font-bold text-[#D32F2F]">
-                  Quitar
-                </button>
+              <div className="flex items-center gap-3 rounded-xl border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] p-2">
+                <div className="h-24 w-24 shrink-0 overflow-hidden rounded-[16px] bg-white ring-1 ring-[rgba(10,9,8,0.06)]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={emplFoto.trim()} alt="" className="h-full w-full object-cover [aspect-ratio:1/1]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold text-[#0A0908]">Foto oficial de la receta</p>
+                  <p className="mt-1 text-[10px] font-medium text-[#7E7468]">Se usa en editor, libro, PDF y vista previa.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <label className="inline-flex h-8 cursor-pointer items-center justify-center rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2.5 text-[10px] font-bold text-[#0A0908]">
+                      Reemplazar
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          readImageFile(file, setEmplFoto);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                    <button type="button" onClick={() => setEmplFoto('')} className="inline-flex h-8 items-center justify-center rounded-lg px-2.5 text-[10px] font-bold text-[#D32F2F]">
+                      Quitar
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : null}
           </div>

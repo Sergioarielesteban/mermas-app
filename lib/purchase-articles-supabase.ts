@@ -47,6 +47,10 @@ export type PurchaseArticle = {
   conversionWeightUnit: WeightConversionUnit | null;
   conversionVolumeUnit: VolumeConversionUnit | null;
   conversionFactor: number | null;
+  technicalFileUrl: string | null;
+  technicalFileName: string | null;
+  technicalFileType: string | null;
+  technicalFileSize: number | null;
 };
 
 export type PurchaseArticleCostHint = {
@@ -203,13 +207,22 @@ function mapArticleRow(row: ArticleRow): PurchaseArticle {
       row.conversion_factor != null && Number.isFinite(Number(row.conversion_factor))
         ? Number(row.conversion_factor)
         : null,
+    technicalFileUrl: row.technical_file_url != null ? String(row.technical_file_url) : null,
+    technicalFileName: row.technical_file_name != null ? String(row.technical_file_name) : null,
+    technicalFileType: row.technical_file_type != null ? String(row.technical_file_type) : null,
+    technicalFileSize:
+      row.technical_file_size != null && Number.isFinite(Number(row.technical_file_size))
+        ? Number(row.technical_file_size)
+        : null,
   };
 }
 
-const ARTICLE_SEL_LEGACY =
+const ARTICLE_SEL_BASE =
   'id,local_id,nombre,nombre_corto,categoria,subcategoria,descripcion,unidad_base,activo,coste_master,metodo_coste_master,coste_master_fijado_en,proveedor_preferido_id,observaciones,created_from_supplier_product_id,referencia_principal_supplier_product_id,unidad_compra,coste_compra_actual,iva_compra_pct,unidad_uso,unidades_uso_por_unidad_compra,rendimiento_pct,coste_unitario_uso,origen_coste,origen_articulo,central_production_recipe_id,central_cost_synced_at,unidad_base_coste,coste_base,formato_compra_nombre,cantidad_por_formato,unidad_por_formato,created_at,updated_at';
+const ARTICLE_SEL_WITH_TECH =
+  `${ARTICLE_SEL_BASE},technical_file_url,technical_file_name,technical_file_type,technical_file_size`;
 const ARTICLE_SEL =
-  `${ARTICLE_SEL_LEGACY},conversion_to_weight_enabled,conversion_weight_unit,conversion_volume_unit,conversion_factor`;
+  `${ARTICLE_SEL_WITH_TECH},conversion_to_weight_enabled,conversion_weight_unit,conversion_volume_unit,conversion_factor`;
 
 export function isMissingPurchaseArticlesError(message: string): boolean {
   const m = message.toLowerCase();
@@ -226,9 +239,15 @@ export async function fetchPurchaseArticles(supabase: SupabaseClient, localId: s
     .eq('local_id', localId)
     .order('nombre', { ascending: true });
   if (error) {
+    const techLegacy = await supabase
+      .from('purchase_articles')
+      .select(ARTICLE_SEL_WITH_TECH)
+      .eq('local_id', localId)
+      .order('nombre', { ascending: true });
+    if (!techLegacy.error) return ((techLegacy.data ?? []) as ArticleRow[]).map(mapArticleRow);
     const legacy = await supabase
       .from('purchase_articles')
-      .select(ARTICLE_SEL_LEGACY)
+      .select(ARTICLE_SEL_BASE)
       .eq('local_id', localId)
       .order('nombre', { ascending: true });
     if (legacy.error) throw new Error(legacy.error.message);
@@ -445,6 +464,36 @@ export async function setPurchaseArticleActivo(
   const { error } = await supabase
     .from('purchase_articles')
     .update({ activo })
+    .eq('id', articleId)
+    .eq('local_id', localId);
+  if (error) throw new Error(error.message);
+}
+
+export type PurchaseArticleTechnicalFilePatch = {
+  technicalFileUrl: string | null;
+  technicalFileName: string | null;
+  technicalFileType: string | null;
+  technicalFileSize: number | null;
+};
+
+export async function updatePurchaseArticleTechnicalFileFields(
+  supabase: SupabaseClient,
+  localId: string,
+  articleId: string,
+  patch: PurchaseArticleTechnicalFilePatch,
+): Promise<void> {
+  const row = {
+    technical_file_url: patch.technicalFileUrl,
+    technical_file_name: patch.technicalFileName,
+    technical_file_type: patch.technicalFileType,
+    technical_file_size:
+      patch.technicalFileSize != null && Number.isFinite(patch.technicalFileSize)
+        ? Math.round(patch.technicalFileSize)
+        : null,
+  };
+  const { error } = await supabase
+    .from('purchase_articles')
+    .update(row)
     .eq('id', articleId)
     .eq('local_id', localId);
   if (error) throw new Error(error.message);

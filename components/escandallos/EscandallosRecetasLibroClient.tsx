@@ -9,7 +9,11 @@ import { getDemoEscandalloPack } from '@/lib/demo-dataset';
 import { isDemoMode } from '@/lib/demo-mode';
 import { buildEscandalloDashboardRows, bucketLabel, type EscandalloRecipeDashboardRow } from '@/lib/escandallos-analytics';
 import { fetchRecipeAllergensForLocal } from '@/lib/appcc-allergens-supabase';
-import { fetchEscandalloTechnicalSheetWithSteps } from '@/lib/escandallos-technical-sheet-supabase';
+import {
+  fetchEscandalloTechnicalSheetsMap,
+  fetchEscandalloTechnicalSheetWithSteps,
+  getOfficialRecipePhotoUrl,
+} from '@/lib/escandallos-technical-sheet-supabase';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   fetchEscandalloLines,
@@ -43,6 +47,7 @@ export default function EscandallosRecetasLibroClient() {
   const [linesByRecipe, setLinesByRecipe] = useState<Record<string, EscandalloLine[]>>({});
   const [rawProducts, setRawProducts] = useState<EscandalloRawProduct[]>([]);
   const [processedProducts, setProcessedProducts] = useState<EscandalloProcessedProduct[]>([]);
+  const [technicalSheetsByRecipe, setTechnicalSheetsByRecipe] = useState<Map<string, EscandalloTechnicalSheet>>(new Map());
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [printingRecipeId, setPrintingRecipeId] = useState<string | null>(null);
@@ -67,6 +72,7 @@ export default function EscandallosRecetasLibroClient() {
       setLinesByRecipe(pack.linesByRecipe);
       setRawProducts(pack.rawProducts);
       setProcessedProducts(pack.processed);
+      setTechnicalSheetsByRecipe(new Map());
       setLoading(false);
       return;
     }
@@ -75,6 +81,7 @@ export default function EscandallosRecetasLibroClient() {
       setLinesByRecipe({});
       setRawProducts([]);
       setProcessedProducts([]);
+      setTechnicalSheetsByRecipe(new Map());
       setLoading(false);
       return;
     }
@@ -82,14 +89,16 @@ export default function EscandallosRecetasLibroClient() {
     setLoading(true);
     setBanner(null);
     try {
-      const [r, raw, processed] = await Promise.all([
+      const [r, raw, processed, sheetsMapResult] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
+        fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
       ]);
       setRecipes(r);
       setRawProducts(raw);
       setProcessedProducts(processed);
+      setTechnicalSheetsByRecipe(sheetsMapResult);
       const entries = await Promise.all(
         r.map(async (rec) => {
           const ls = await fetchEscandalloLines(supabase, localId, rec.id);
@@ -342,16 +351,34 @@ export default function EscandallosRecetasLibroClient() {
                 key={r.id}
                 className="flex flex-col rounded-2xl border border-zinc-200/90 bg-white p-4 shadow-sm ring-1 ring-zinc-100 transition hover:shadow-md"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-base font-black tracking-tight text-zinc-900">{r.name}</h3>
-                    <p className="mt-0.5 text-xs text-zinc-500">
-                      {r.yieldQty} {r.yieldLabel}
-                    </p>
+                <div className="flex items-start gap-3">
+                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-[16px] bg-[#FAFAF9] ring-1 ring-zinc-200/80">
+                    {getOfficialRecipePhotoUrl(technicalSheetsByRecipe.get(r.id)) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={getOfficialRecipePhotoUrl(technicalSheetsByRecipe.get(r.id)) ?? ''}
+                        alt=""
+                        className="h-full w-full object-cover [aspect-ratio:1/1]"
+                      />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle_at_top,_rgba(211,47,47,0.08),_transparent_60%)] text-center">
+                        <span className="px-2 text-[8px] font-bold uppercase tracking-[0.14em] text-zinc-500">Sin foto</span>
+                      </div>
+                    )}
                   </div>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white ${st.className}`}>
-                    {st.label}
-                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h3 className="truncate text-base font-black tracking-tight text-zinc-900">{r.name}</h3>
+                        <p className="mt-0.5 text-xs text-zinc-500">
+                          {r.yieldQty} {r.yieldLabel}
+                        </p>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white ${st.className}`}>
+                        {st.label}
+                      </span>
+                    </div>
+                  </div>
                 </div>
                 <dl className="mt-4 grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-lg bg-zinc-50 px-2 py-1.5">

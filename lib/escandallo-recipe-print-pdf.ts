@@ -13,6 +13,7 @@ import type {
   EscandalloTechnicalSheet,
   EscandalloTechnicalSheetStep,
 } from '@/lib/escandallos-technical-sheet-supabase';
+import { getOfficialRecipePhotoUrl } from '@/lib/escandallos-technical-sheet-supabase';
 import {
   foodCostPercentOfNetSale,
   lineUnitPriceEur,
@@ -177,11 +178,18 @@ async function loadImageDataUrl(src: string | null | undefined): Promise<string 
   if (!src || typeof document === 'undefined') return null;
   try {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    const normalizedSrc = src.trim();
+    const isInlineSrc =
+      normalizedSrc.startsWith('data:') ||
+      normalizedSrc.startsWith('blob:') ||
+      normalizedSrc.startsWith('/');
+    if (!isInlineSrc) {
+      img.crossOrigin = 'anonymous';
+    }
     const loaded = await new Promise<HTMLImageElement | null>((resolve) => {
       img.onload = () => resolve(img);
       img.onerror = () => resolve(null);
-      img.src = src;
+      img.src = normalizedSrc;
     });
     if (!loaded || loaded.naturalWidth <= 0 || loaded.naturalHeight <= 0) return null;
     const canvas = document.createElement('canvas');
@@ -757,7 +765,7 @@ function addObservationsAndQr(doc: jsPDF, payload: RecipePrintPayload, y: number
 
 export async function printRecipePDF(payload: RecipePrintPayload): Promise<void> {
   const logo = await loadOfficialChefLogo();
-  const photoDataUrl = await loadImageDataUrl(payload.sheet?.fotoUrl ?? payload.sheet?.emplatadoFotoUrl ?? null);
+  const photoDataUrl = await loadImageDataUrl(getOfficialRecipePhotoUrl(payload.sheet));
   const recipeUrl =
     typeof window !== 'undefined'
       ? `${window.location.origin}/escandallos/recetas/${payload.recipe.id}/editar`

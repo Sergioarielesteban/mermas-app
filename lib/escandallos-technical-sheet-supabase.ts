@@ -91,6 +91,15 @@ export type EscandalloTechnicalSheetUpdate = Partial<{
   operationalCost: number | null;
 }>;
 
+export function getOfficialRecipePhotoUrl(
+  sheet: Pick<EscandalloTechnicalSheet, 'emplatadoFotoUrl' | 'fotoUrl'> | null | undefined,
+): string | null {
+  const plating = typeof sheet?.emplatadoFotoUrl === 'string' ? sheet.emplatadoFotoUrl.trim() : '';
+  if (plating) return plating;
+  const legacy = typeof sheet?.fotoUrl === 'string' ? sheet.fotoUrl.trim() : '';
+  return legacy || null;
+}
+
 type SheetRow = {
   id: string;
   local_id: string;
@@ -299,12 +308,30 @@ export async function fetchEscandalloTechnicalSheetWithSteps(
   localId: string,
   recipeId: string,
 ): Promise<{ sheet: EscandalloTechnicalSheet | null; steps: EscandalloTechnicalSheetStep[] }> {
-  const { data: sheetRow, error: sheetErr } = await supabase
-    .from('escandallo_recipe_technical_sheets')
-    .select()
-    .eq('local_id', localId)
-    .eq('recipe_id', recipeId)
-    .maybeSingle();
+  let sheetRow: SheetRow | null = null;
+  let sheetErr: { message: string } | null = null;
+  {
+    const full = await supabase
+      .from('escandallo_recipe_technical_sheets')
+      .select(SHEET_SELECT)
+      .eq('local_id', localId)
+      .eq('recipe_id', recipeId)
+      .maybeSingle();
+    if (!full.error) {
+      sheetRow = (full.data ?? null) as SheetRow | null;
+    } else if (missingColumnFromSupabaseError(full.error.message)) {
+      const legacy = await supabase
+        .from('escandallo_recipe_technical_sheets')
+        .select(SHEET_SELECT_LEGACY)
+        .eq('local_id', localId)
+        .eq('recipe_id', recipeId)
+        .maybeSingle();
+      sheetRow = (legacy.data ?? null) as SheetRow | null;
+      sheetErr = legacy.error ? { message: legacy.error.message } : null;
+    } else {
+      sheetErr = { message: full.error.message };
+    }
+  }
   if (sheetErr) throw new Error(sheetErr.message);
   if (!sheetRow) return { sheet: null, steps: [] };
   const sheet = mapSheet(sheetRow as SheetRow);
@@ -325,13 +352,15 @@ export async function insertEscandalloTechnicalSheet(
   localId: string,
   recipeId: string,
 ): Promise<EscandalloTechnicalSheet> {
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('escandallo_recipe_technical_sheets')
     .insert({ local_id: localId, recipe_id: recipeId })
-    .select()
+    .select('id')
     .single();
   if (error) throw new Error(error.message);
-  return mapSheet(data as SheetRow);
+  const created = await fetchEscandalloTechnicalSheetWithSteps(supabase, localId, recipeId);
+  if (!created.sheet) throw new Error('No se pudo cargar la ficha técnica creada.');
+  return created.sheet;
 }
 
 export async function updateEscandalloTechnicalSheet(
@@ -342,26 +371,37 @@ export async function updateEscandalloTechnicalSheet(
 ): Promise<EscandalloTechnicalSheet> {
   const baseRow = sheetToRowPatch(patch);
   if (Object.keys(baseRow).length === 0) {
-    const { data, error } = await supabase
+    const byId = await supabase
       .from('escandallo_recipe_technical_sheets')
-      .select()
+      .select('recipe_id')
       .eq('local_id', localId)
       .eq('id', sheetId)
       .single();
-    if (error) throw new Error(error.message);
-    return mapSheet(data as SheetRow);
+    if (byId.error) throw new Error(byId.error.message);
+    const current = await fetchEscandalloTechnicalSheetWithSteps(supabase, localId, String(byId.data.recipe_id));
+    if (!current.sheet) throw new Error('No se pudo cargar la ficha técnica.');
+    return current.sheet;
   }
 
   let row: Record<string, unknown> = { ...baseRow };
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('escandallo_recipe_technical_sheets')
       .update(row)
       .eq('local_id', localId)
-      .eq('id', sheetId)
-      .select()
-      .single();
-    if (!error) return mapSheet(data as SheetRow);
+      .eq('id', sheetId);
+    if (!error) {
+      const byId = await supabase
+        .from('escandallo_recipe_technical_sheets')
+        .select('recipe_id')
+        .eq('local_id', localId)
+        .eq('id', sheetId)
+        .single();
+      if (byId.error) throw new Error(byId.error.message);
+      const current = await fetchEscandalloTechnicalSheetWithSteps(supabase, localId, String(byId.data.recipe_id));
+      if (!current.sheet) throw new Error('No se pudo cargar la ficha técnica guardada.');
+      return current.sheet;
+    }
 
     const missingColumn = missingColumnFromSupabaseError(error.message);
     if (!missingColumn || !(missingColumn in row)) {
@@ -370,14 +410,16 @@ export async function updateEscandalloTechnicalSheet(
 
     delete row[missingColumn];
     if (Object.keys(row).length === 0) {
-      const { data: current, error: fetchError } = await supabase
+      const byId = await supabase
         .from('escandallo_recipe_technical_sheets')
-        .select()
+        .select('recipe_id')
         .eq('local_id', localId)
         .eq('id', sheetId)
         .single();
-      if (fetchError) throw new Error(fetchError.message);
-      return mapSheet(current as SheetRow);
+      if (byId.error) throw new Error(byId.error.message);
+      const current = await fetchEscandalloTechnicalSheetWithSteps(supabase, localId, String(byId.data.recipe_id));
+      if (!current.sheet) throw new Error('No se pudo cargar la ficha técnica.');
+      return current.sheet;
     }
   }
 
@@ -388,10 +430,16 @@ export async function fetchEscandalloTechnicalSheetsMap(
   supabase: SupabaseClient,
   localId: string,
 ): Promise<Map<string, EscandalloTechnicalSheet>> {
-  const full = await supabase
+  let full: { data: unknown[] | null; error: { message: string } | null } = await supabase
     .from('escandallo_recipe_technical_sheets')
-    .select()
+    .select(SHEET_SELECT)
     .eq('local_id', localId);
+  if (full.error && missingColumnFromSupabaseError(full.error.message)) {
+    full = await supabase
+      .from('escandallo_recipe_technical_sheets')
+      .select(SHEET_SELECT_LEGACY)
+      .eq('local_id', localId);
+  }
   if (full.error) throw new Error(full.error.message);
   return new Map(((full.data ?? []) as SheetRow[]).map((row) => {
     const mapped = mapSheet(row);

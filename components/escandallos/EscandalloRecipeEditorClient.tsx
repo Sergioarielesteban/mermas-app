@@ -29,6 +29,7 @@ import {
 import {
   fetchEscandalloTechnicalSheetsMap,
   fetchEscandalloTechnicalSheetWithSteps,
+  getOfficialRecipePhotoUrl,
   insertEscandalloTechnicalSheet,
   replaceEscandalloTechnicalSheetSteps,
   updateEscandalloTechnicalSheet,
@@ -125,6 +126,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const [draftPosArticleCode, setDraftPosArticleCode] = useState('');
   const [draftFinalWeightQty, setDraftFinalWeightQty] = useState('');
   const [draftFinalWeightUnit, setDraftFinalWeightUnit] = useState<'kg' | 'l'>('kg');
+  const [draftFamilyName, setDraftFamilyName] = useState('');
   const [ingredientDrafts, setIngredientDrafts] = useState<IngredientDraftRow[]>([emptyIngredientDraft()]);
 
   const [techBundle, setTechBundle] = useState<RecipeTechBundle>({ sheet: null, steps: [], loading: false });
@@ -238,12 +240,12 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     }
     setBanner(null);
     try {
-      const [r, raw, processed, categoryMap, sheetsMap] = await Promise.all([
+      const [r, raw, processed, categoryMap, sheetsMapResult] = await Promise.all([
         fetchEscandalloRecipes(supabase, localId),
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloRecipeCategoriasMap(supabase, localId),
-        fetchEscandalloTechnicalSheetsMap(supabase, localId),
+        fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
       ]);
       setRecipes(r);
       setRawProducts(raw);
@@ -253,7 +255,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
           a.localeCompare(b, 'es'),
         ),
       );
-      setTechnicalSheetsByRecipe(sheetsMap);
+      setTechnicalSheetsByRecipe(sheetsMapResult);
       const linesEntries = await Promise.all(
         r.map(async (rec) => {
           const ls = await fetchEscandalloLines(supabase, localId, rec.id);
@@ -368,6 +370,11 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     if (!profileReady || !recipe) return;
     void loadAux();
   }, [profileReady, recipe, loadAux]);
+
+  useEffect(() => {
+    if (!recipe || recipe.isSubRecipe) return;
+    setDraftFamilyName(techBundle.sheet?.categoria ?? '');
+  }, [recipe, techBundle.sheet?.id, techBundle.sheet?.categoria]);
 
   const totalCostLive = useMemo(() => {
     if (!recipe) return 0;
@@ -499,6 +506,22 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
         }
       }
       await updateEscandalloRecipe(supabase, localId, recipe.id, patch);
+      if (!recipe.isSubRecipe) {
+        const familyValue = draftFamilyName.trim();
+        let nextSheet = techBundle.sheet;
+        if (nextSheet) {
+          if ((nextSheet.categoria ?? '') !== familyValue) {
+            nextSheet = await updateEscandalloTechnicalSheet(supabase, localId, nextSheet.id, { categoria: familyValue });
+          }
+        } else if (familyValue) {
+          const createdSheet = await insertEscandalloTechnicalSheet(supabase, localId, recipe.id);
+          nextSheet = await updateEscandalloTechnicalSheet(supabase, localId, createdSheet.id, { categoria: familyValue });
+        }
+        if (nextSheet) {
+          setTechBundle((prev) => ({ ...prev, sheet: nextSheet }));
+          setTechnicalSheetsByRecipe((prev) => new Map(prev).set(recipe.id, nextSheet!));
+        }
+      }
       setSuccessMsg('Cabecera guardada.');
       window.setTimeout(() => setSuccessMsg(null), 3200);
       setRecipes((prev) =>
@@ -699,6 +722,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   }
 
   const kindLabel = recipe?.isSubRecipe ? 'BASE' : 'PLATO';
+  const typeSummaryLabel = recipe?.isSubRecipe ? 'Base / Elaboración' : 'Plato';
   const statusTone =
     fcPct != null && fcPct > 30
       ? 'bg-[#D32F2F]/10 text-[#B91C1C] ring-[#D32F2F]/15'
@@ -742,12 +766,54 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                   {kindLabel} · {draftYieldQty || recipe.yieldQty} {draftYieldLabel || recipe.yieldLabel}
                 </p>
               </div>
+              {!recipe.isSubRecipe ? (
+                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-[16px] bg-[#FAFAF9] ring-1 ring-[rgba(10,9,8,0.06)]">
+                  {getOfficialRecipePhotoUrl(techBundle.sheet) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={getOfficialRecipePhotoUrl(techBundle.sheet) ?? ''}
+                      alt=""
+                      className="h-full w-full object-cover [aspect-ratio:1/1]"
+                    />
+                  ) : (
+                    <div className="grid h-full w-full place-items-center text-[8px] font-bold uppercase tracking-[0.12em] text-[#7E7468]">
+                      Sin foto
+                    </div>
+                  )}
+                </div>
+              ) : null}
               <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.1em] ring-1 ${statusTone}`}>
                 {statusLabel}
               </span>
             </div>
 
-            <div className={`mt-2 grid gap-1 ${recipe.isSubRecipe ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
+            <div className={`mt-2 grid gap-1 ${recipe.isSubRecipe ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-6'}`}>
+              <label className="space-y-1">
+                <span className="text-[8px] font-black uppercase tracking-[0.11em] text-[#7E7468]">Tipo</span>
+                <input
+                  value={typeSummaryLabel}
+                  readOnly
+                  className="h-7.5 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[12px] font-semibold text-[#7E7468] outline-none"
+                />
+              </label>
+              {!recipe.isSubRecipe ? (
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="text-[8px] font-black uppercase tracking-[0.11em] text-[#7E7468]">Familia carta</span>
+                  <input
+                    list="escandallo-editor-family-options"
+                    value={draftFamilyName}
+                    disabled={demoReadonly}
+                    onChange={(e) => setDraftFamilyName(e.target.value)}
+                    className="h-7.5 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-[#FAFAF9] px-2 text-[12px] font-semibold text-[#0A0908] outline-none"
+                    placeholder="Familia carta"
+                  />
+                  <datalist id="escandallo-editor-family-options">
+                    {familyOptions.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                </label>
+              ) : null}
               <label className="space-y-1">
                 <span className="text-[8px] font-black uppercase tracking-[0.11em] text-[#7E7468]">Raciones</span>
                 <input
@@ -963,7 +1029,6 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
             sheet={techBundle.sheet}
             steps={techBundle.steps}
             recipeAllergens={recipeAllergens}
-            familyOptions={familyOptions}
             productionTotalCost={totalCostLive}
             rawById={rawById}
             loading={techBundle.loading}
