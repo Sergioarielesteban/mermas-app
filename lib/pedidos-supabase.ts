@@ -2343,6 +2343,13 @@ export type HistoricoComparableLast = {
   unidad: string;
 };
 
+/** Media del histórico comparable (misma base que evolución de precios) por producto proveedor. */
+export type HistoricoComparableWeighted = {
+  weightedAvg: number;
+  weightedQty: number;
+  unidad: string;
+};
+
 /**
  * Por producto de proveedor: última fila de histórico (precio_nuevo + unidad_comparacion).
  * Si falta la tabla, devuelve mapa vacío (sin lanzar).
@@ -2383,6 +2390,70 @@ export async function fetchLastHistoricoComparableBySupplierProductIds(
         ? String(row.unidad_comparacion).trim()
         : 'ud';
     out.set(sid, { precio: Math.round(p * 10000) / 10000, unidad: u });
+  }
+  return out;
+}
+
+/**
+ * PMP desde `historico_precios` en la misma ventana y con la misma unidad comparable
+ * que usa Pedidos → Evolución de precios.
+ */
+export async function fetchWeightedAvgHistoricoComparableBySupplierProductIds(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductIds: string[],
+  windowDays: number,
+): Promise<Map<string, HistoricoComparableWeighted>> {
+  const out = new Map<string, HistoricoComparableWeighted>();
+  if (!supplierProductIds.length) return out;
+
+  const endMs = Date.now();
+  const startMs = endMs - Math.max(1, windowDays) * 86_400_000;
+  const startIso = new Date(startMs).toISOString();
+  const endIso = new Date(endMs).toISOString();
+
+  const { data, error } = await supabase
+    .from('historico_precios')
+    .select('supplier_product_id,precio_nuevo,unidad_comparacion,created_at')
+    .eq('local_id', localId)
+    .in('supplier_product_id', supplierProductIds)
+    .gte('created_at', startIso)
+    .lte('created_at', endIso)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    if (isMissingHistoricoPreciosTableError(error.message)) return out;
+    throw new Error(error.message);
+  }
+
+  const grouped = new Map<string, { sum: number; qty: number; unidad: string }>();
+  for (const row of (data ?? []) as Array<{
+    supplier_product_id: string | null;
+    precio_nuevo: number | string | null;
+    unidad_comparacion?: string | null;
+  }>) {
+    const sid = row.supplier_product_id != null ? String(row.supplier_product_id) : '';
+    if (!sid) continue;
+    const precio = Number(row.precio_nuevo);
+    if (!Number.isFinite(precio) || precio <= 0) continue;
+    const unidad =
+      row.unidad_comparacion != null && String(row.unidad_comparacion).trim() !== ''
+        ? String(row.unidad_comparacion).trim()
+        : 'ud';
+    const cur = grouped.get(sid) ?? { sum: 0, qty: 0, unidad };
+    cur.sum += precio;
+    cur.qty += 1;
+    if (!cur.unidad && unidad) cur.unidad = unidad;
+    grouped.set(sid, cur);
+  }
+
+  for (const [sid, cur] of grouped.entries()) {
+    if (cur.qty <= 0) continue;
+    out.set(sid, {
+      weightedAvg: Math.round((cur.sum / cur.qty) * 100) / 100,
+      weightedQty: cur.qty,
+      unidad: cur.unidad || 'ud',
+    });
   }
   return out;
 }

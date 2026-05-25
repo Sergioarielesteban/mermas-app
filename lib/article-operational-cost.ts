@@ -1,16 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import {
-  computeWeightedAvgBySupplierProductId,
-  ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS,
-} from '@/lib/escandallos-weighted-purchase-prices';
+import { ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS } from '@/lib/escandallos-weighted-purchase-prices';
+import { convertQuantity, unitCompatible } from '@/lib/escandallo-operational-usage';
 import { resolveOperationalPrice, type OperationalPriceSource } from '@/lib/operational-price';
-import { fetchOrders } from '@/lib/pedidos-supabase';
+import { fetchWeightedAvgHistoricoComparableBySupplierProductIds } from '@/lib/pedidos-supabase';
 import { fetchPurchaseArticleCostHintsByIds, fetchPurchaseArticles } from '@/lib/purchase-articles-supabase';
 
 type SupplierProductRow = {
   id: string;
   article_id: string | null;
   price_per_unit: number | null;
+  unit: string | null;
 };
 
 export type ArticleOperationalCostHint = {
@@ -33,6 +32,47 @@ function toUsageUnitCost(pricePerPurchaseUnit: number | null, unitsUsoPorCompra:
   return Math.round((pricePerPurchaseUnit / usageQty) * 1000000) / 1000000;
 }
 
+function normalizeUnitKey(unit: string | null | undefined): string {
+  return String(unit ?? '').trim().toLowerCase();
+}
+
+function comparablePriceToUsageUnitCost(
+  pricePerComparableUnit: number | null | undefined,
+  comparableUnit: string | null | undefined,
+  purchaseUnit: string | null | undefined,
+  usageUnit: string | null | undefined,
+  unitsUsoPorCompra: number | null,
+  rendimientoPct: number | null,
+): number | null {
+  if (
+    pricePerComparableUnit == null ||
+    !Number.isFinite(pricePerComparableUnit) ||
+    pricePerComparableUnit <= 0 ||
+    !usageUnit
+  ) {
+    return null;
+  }
+  const from = normalizeUnitKey(comparableUnit);
+  const purchase = normalizeUnitKey(purchaseUnit);
+  const usage = normalizeUnitKey(usageUnit);
+  if (!from || !usage) return null;
+  if (from === usage) return Math.round(pricePerComparableUnit * 1000000) / 1000000;
+  if (unitCompatible(from, usage)) {
+    const comparableQtyForOneUsage = convertQuantity(1, usage, from);
+    if (
+      comparableQtyForOneUsage != null &&
+      Number.isFinite(comparableQtyForOneUsage) &&
+      comparableQtyForOneUsage > 0
+    ) {
+      return Math.round(pricePerComparableUnit * comparableQtyForOneUsage * 1000000) / 1000000;
+    }
+  }
+  if (from === purchase) {
+    return toUsageUnitCost(pricePerComparableUnit, unitsUsoPorCompra, rendimientoPct);
+  }
+  return null;
+}
+
 /**
  * Coste operativo de Artículo Máster con prioridad:
  * pmp (sobre referencia principal) > último precio proveedor > coste_unitario_uso (artículo) > sin precio.
@@ -46,10 +86,9 @@ export async function fetchArticleOperationalCostHintsByIds(
   const ids = [...new Set(articleIds)].filter(Boolean);
   if (!ids.length) return out;
 
-  const [articlesAll, masterHints, orders] = await Promise.all([
+  const [articlesAll, masterHints] = await Promise.all([
     fetchPurchaseArticles(supabase, localId),
     fetchPurchaseArticleCostHintsByIds(supabase, localId, ids),
-    fetchOrders(supabase, localId, { recentDays: 120 }),
   ]);
   const articles = articlesAll.filter((a) => ids.includes(a.id));
   const refProductIds = articles
@@ -60,15 +99,17 @@ export async function fetchArticleOperationalCostHintsByIds(
   if (refProductIds.length) {
     const { data } = await supabase
       .from('pedido_supplier_products')
-      .select('id,article_id,price_per_unit')
+      .select('id,article_id,price_per_unit,unit')
       .eq('local_id', localId)
       .in('id', refProductIds);
     supplierRows = (data ?? []) as SupplierProductRow[];
   }
   const supplierById = new Map(supplierRows.map((r) => [r.id, r]));
 
-  const weighted = computeWeightedAvgBySupplierProductId(
-    orders.filter((o) => o.status !== 'draft'),
+  const weighted = await fetchWeightedAvgHistoricoComparableBySupplierProductIds(
+    supabase,
+    localId,
+    refProductIds,
     ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS,
   );
 
@@ -85,8 +126,15 @@ export async function fetchArticleOperationalCostHintsByIds(
     }
     const refId = a.referenciaPrincipalSupplierProductId ?? null;
     const sp = refId ? supplierById.get(refId) : undefined;
-    const weightedPurchase = refId ? weighted.get(refId)?.weightedAvg ?? null : null;
-    const pmpUsage = toUsageUnitCost(weightedPurchase, a.unidadesUsoPorUnidadCompra, a.rendimientoPct);
+    const weightedComparable = refId ? weighted.get(refId) ?? null : null;
+    const pmpUsage = comparablePriceToUsageUnitCost(
+      weightedComparable?.weightedAvg ?? null,
+      weightedComparable?.unidad ?? null,
+      sp?.unit ?? null,
+      master?.unidadUso ?? a.unidadUso ?? null,
+      a.unidadesUsoPorUnidadCompra,
+      a.rendimientoPct,
+    );
     const lastUsage = toUsageUnitCost(sp?.price_per_unit ?? null, a.unidadesUsoPorUnidadCompra, a.rendimientoPct);
     const masterUsage = master?.costeUnitarioUso ?? null;
     const resolved = resolveOperationalPrice({

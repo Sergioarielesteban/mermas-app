@@ -1,8 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import {
-  computeWeightedAvgBySupplierProductId,
-  ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS,
-} from '@/lib/escandallos-weighted-purchase-prices';
+import { ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS } from '@/lib/escandallos-weighted-purchase-prices';
 import {
   sanitizeEscandalloIngredientUnit,
   unitsMatchForIngredientCost,
@@ -13,14 +10,16 @@ import type {
 } from '@/lib/escandallo-operational-usage';
 import {
   computeOperationalCost,
+  convertQuantity,
   computeYieldCostPerUnit,
+  unitCompatible,
 } from '@/lib/escandallo-operational-usage';
 import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet-supabase';
 import { formatUnitPriceEur, roundMoney } from '@/lib/money-format';
 import { resolveOperationalPrice, type OperationalPriceSource } from '@/lib/operational-price';
 import { fetchPurchaseArticleCostHintsByIds } from '@/lib/purchase-articles-supabase';
 import type { VolumeConversionUnit, WeightConversionUnit } from '@/lib/escandallo-input-weight';
-import { fetchOrders } from '@/lib/pedidos-supabase';
+import { fetchWeightedAvgHistoricoComparableBySupplierProductIds } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
 
 export type EscandalloRecipe = {
@@ -130,6 +129,35 @@ export type EscandalloProcessedProduct = {
   createdAt: string;
   updatedAt: string;
 };
+
+function normalizeUnitKey(unit: string | null | undefined): string {
+  return String(unit ?? '').trim().toLowerCase();
+}
+
+function convertComparablePriceToUnit(
+  pricePerComparableUnit: number | null | undefined,
+  comparableUnit: string | null | undefined,
+  targetUnit: string | null | undefined,
+): number | null {
+  if (
+    pricePerComparableUnit == null ||
+    !Number.isFinite(pricePerComparableUnit) ||
+    pricePerComparableUnit <= 0 ||
+    !targetUnit
+  ) {
+    return null;
+  }
+  const from = normalizeUnitKey(comparableUnit);
+  const to = normalizeUnitKey(targetUnit);
+  if (!from || !to) return null;
+  if (from === to) return Math.round(pricePerComparableUnit * 10000) / 10000;
+  if (!unitCompatible(from, to)) return null;
+  const comparableQtyForOneTarget = convertQuantity(1, to, from);
+  if (comparableQtyForOneTarget == null || !Number.isFinite(comparableQtyForOneTarget) || comparableQtyForOneTarget <= 0) {
+    return null;
+  }
+  return Math.round(pricePerComparableUnit * comparableQtyForOneTarget * 10000) / 10000;
+}
 
 type RecipeRow = {
   id: string;
@@ -404,19 +432,22 @@ export async function fetchEscandalloRawProductsWithWeightedPurchasePrices(
   supabase: SupabaseClient,
   localId: string,
 ): Promise<EscandalloRawProduct[]> {
-  const [products, orders] = await Promise.all([
-    fetchProductsForEscandallo(supabase, localId),
-    fetchOrders(supabase, localId, { recentDays: 120 }),
-  ]);
-  const weighted = computeWeightedAvgBySupplierProductId(
-    orders.filter((o) => o.status !== 'draft'),
+  const products = await fetchProductsForEscandallo(supabase, localId);
+  const weighted = await fetchWeightedAvgHistoricoComparableBySupplierProductIds(
+    supabase,
+    localId,
+    products.map((p) => p.id),
     ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS,
   );
   const withPmp = products.map((p) => {
     const w = weighted.get(p.id);
     const supplierLastPrice = p.pricePerUnit;
+    const pmpComparablePrice =
+      w != null && w.weightedQty > 0
+        ? convertComparablePriceToUnit(w.weightedAvg, w.unidad, p.pricingUnit ?? p.unit)
+        : null;
     const resolved = resolveOperationalPrice({
-      pmpPrice: w != null && w.weightedQty > 0 ? w.weightedAvg : null,
+      pmpPrice: pmpComparablePrice,
       supplierLastPrice,
     });
     return { ...p, pricePerUnit: resolved.price ?? 0, operationalPriceSource: resolved.source };
