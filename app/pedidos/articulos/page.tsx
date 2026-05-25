@@ -53,6 +53,12 @@ function formatFileSize(bytes: number | null | undefined): string {
   return `${(value / (1024 * 1024)).toLocaleString('es-ES', { maximumFractionDigits: 1 })} MB`;
 }
 
+function isMobileBrowser(): boolean {
+  if (typeof window === 'undefined') return false;
+  const ua = window.navigator.userAgent || '';
+  return /iPhone|iPad|iPod|Android/i.test(ua);
+}
+
 export default function PedidosArticulosPage() {
   const { localCode, localName, localId, email, profileReady } = useAuth();
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
@@ -676,7 +682,8 @@ function ArticleCard({
     if (!technicalPath || !localId || !supabaseOk) return;
     const supabase = getSupabaseClient();
     if (!supabase) return;
-    const pdfWindow = !isTechnicalImage ? window.open('', '_blank', 'noopener,noreferrer') : null;
+    const shouldOpenInSameTab = !isTechnicalImage && isMobileBrowser();
+    const pdfWindow = !isTechnicalImage && !shouldOpenInSameTab ? window.open('', '_blank') : null;
     setDocBusy(true);
     setDocMsg(null);
     try {
@@ -685,10 +692,14 @@ function ArticleCard({
         setDocPreviewUrl(signedUrl);
         setImageViewerUrl(signedUrl);
       } else {
+        if (shouldOpenInSameTab) {
+          window.location.assign(signedUrl);
+          return;
+        }
         if (pdfWindow) {
-          pdfWindow.location.href = signedUrl;
+          pdfWindow.location.replace(signedUrl);
         } else {
-          window.location.href = signedUrl;
+          window.open(signedUrl, '_blank', 'noopener,noreferrer');
         }
       }
     } catch (e: unknown) {
