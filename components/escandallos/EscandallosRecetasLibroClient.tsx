@@ -122,8 +122,8 @@ export default function EscandallosRecetasLibroClient() {
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
 
   const rows = useMemo(
-    () => buildEscandalloDashboardRows(recipes, linesByRecipe, rawById, processedById),
-    [recipes, linesByRecipe, rawById, processedById],
+    () => buildEscandalloDashboardRows(recipes, linesByRecipe, rawById, processedById, technicalSheetsByRecipe),
+    [recipes, linesByRecipe, rawById, processedById, technicalSheetsByRecipe],
   );
 
   const mainRows = useMemo(() => rows.filter((r) => !r.isSubRecipe), [rows]);

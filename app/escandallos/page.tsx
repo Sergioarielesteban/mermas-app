@@ -598,7 +598,10 @@ export default function EscandallosPage() {
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
   const processedById = useMemo(() => new Map(processedProducts.map((p) => [p.id, p])), [processedProducts]);
   const recipesById = useMemo(() => new Map(recipes.map((r) => [r.id, r])), [recipes]);
-  const rows = useMemo(() => buildEscandalloDashboardRows(recipes, linesByRecipe, rawById, processedById), [recipes, linesByRecipe, rawById, processedById]);
+  const rows = useMemo(
+    () => buildEscandalloDashboardRows(recipes, linesByRecipe, rawById, processedById, technicalSheetsByRecipe),
+    [recipes, linesByRecipe, rawById, processedById, technicalSheetsByRecipe],
+  );
   const mainRows = useMemo(() => rows.filter((r) => !r.isSubRecipe), [rows]);
   const subRows = useMemo(() => rows.filter((r) => r.isSubRecipe), [rows]);
   const familyOptions = useMemo(() => {

@@ -1,3 +1,4 @@
+import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet-supabase';
 import type { EscandalloLine, EscandalloProcessedProduct, EscandalloRawProduct, EscandalloRecipe } from '@/lib/escandallos-supabase';
 import {
   foodCostPercentOfNetSale,
@@ -42,6 +43,7 @@ export function buildEscandalloDashboardRows(
   linesByRecipe: Record<string, EscandalloLine[]>,
   rawById: Map<string, EscandalloRawProduct>,
   processedById: Map<string, EscandalloProcessedProduct>,
+  technicalSheetsByRecipe?: Map<string, EscandalloTechnicalSheet>,
 ): EscandalloRecipeDashboardRow[] {
   const recipesById = new Map(recipes.map((r) => [r.id, r]));
   return recipes.map((recipe) => {
@@ -49,6 +51,7 @@ export function buildEscandalloDashboardRows(
     const totalCostEur = recipeTotalCostEur(lines, rawById, processedById, {
       linesByRecipe,
       recipesById,
+      technicalSheetsByRecipe,
       recipeId: recipe.id,
     });
     const y = recipe.yieldQty > 0 ? recipe.yieldQty : 1;
