@@ -1842,7 +1842,7 @@ export async function fetchOrders(
   const itemRows = await fetchPurchaseOrderItemRows(
     supabase,
     orderRows.map((row) => row.id),
-    { signal },
+    { signal, localId },
   );
   const profileByUserId = await fetchProfileLabelsByUserId(
     supabase,
@@ -1896,7 +1896,7 @@ export async function fetchOrdersForFinanzasCommitment(
   const itemRows = await fetchPurchaseOrderItemRows(
     supabase,
     orderRows.map((r) => r.id),
-    { signal },
+    { signal, localId },
   );
   const profileByUserId = await fetchProfileLabelsByUserId(
     supabase,
@@ -1987,7 +1987,8 @@ function keepVisibleItemOrder(
   previousItems: PedidoOrderItem[],
   freshItems: PedidoOrderItem[],
 ): PedidoOrderItem[] {
-  if (previousItems.length === 0 || freshItems.length === 0) return freshItems;
+  if (previousItems.length === 0) return freshItems;
+  if (freshItems.length === 0) return previousItems;
   const freshById = new Map(freshItems.map((item) => [item.id, item]));
   const seen = new Set<string>();
   const stable = previousItems.flatMap((item) => {
@@ -2157,7 +2158,11 @@ export async function saveOrder(
     }>;
   },
 ) {
-  const rpcItems = payload.items.map((item) => ({
+  const nonEmptyItems = payload.items.filter((item) => item.quantity > 0);
+  if (nonEmptyItems.length === 0) {
+    throw new Error('No se puede guardar un pedido sin articulos.');
+  }
+  const rpcItems = nonEmptyItems.map((item) => ({
     supplier_product_id: item.supplierProductId,
     product_name: item.productName,
     unit: item.unit,

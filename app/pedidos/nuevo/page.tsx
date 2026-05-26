@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { CalendarDays, Filter, Package, Search, Sparkles } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
@@ -208,21 +207,28 @@ export default function NuevoPedidoPage() {
   const { upsertOrder, orders } = usePedidosOrders();
 
   const pullNewOrderIntoStore = React.useCallback(
-    async (orderId: string) => {
+    async (orderId: string, expectedItemCount = 0) => {
       if (!localId) return;
       const supabase = getSupabaseClient();
       if (!supabase) return;
+      let best: PedidoOrder | null = null;
       for (let attempt = 0; attempt < 5; attempt++) {
         if (attempt > 0) await new Promise((r) => setTimeout(r, 300 + attempt * 200));
         try {
           const o = await fetchOrderById(supabase, localId, orderId);
           if (o) {
-            upsertOrder(o);
-            return;
+            best = o;
+            if (expectedItemCount <= 0 || o.items.length >= expectedItemCount) {
+              upsertOrder(o);
+              return;
+            }
           }
         } catch {
           /* réplica u error transitorio: reintentar */
         }
+      }
+      if (best && (expectedItemCount <= 0 || best.items.length > 0)) {
+        upsertOrder(best);
       }
     },
     [localId, upsertOrder],
@@ -1022,59 +1028,106 @@ export default function NuevoPedidoPage() {
     }
     return map;
   }, [editSourceItems]);
+  const supplierProductIds = React.useMemo(
+    () => new Set(supplierProducts.map((product) => product.id)),
+    [supplierProducts],
+  );
+  const orphanEditItems = React.useMemo<PedidoOrderItem[]>(
+    () =>
+      (editSourceItems ?? [])
+        .filter(
+          (item) =>
+            item.quantity > 0 &&
+            (!item.supplierProductId || !supplierProductIds.has(item.supplierProductId)),
+        )
+        .map((item): PedidoOrderItem => {
+          const quantity =
+            item.supplierProductId && qtyByProductId[item.supplierProductId] != null
+              ? qtyByProductId[item.supplierProductId]
+              : item.quantity;
+          const lineTotal = Math.round(quantity * item.pricePerUnit * 100) / 100;
+          return {
+            ...item,
+            quantity,
+            receivedQuantity:
+              quantity <= 0
+                ? 0
+                : item.receivedQuantity > 0
+                  ? Math.min(item.receivedQuantity, quantity)
+                  : item.receivedQuantity,
+            lineTotal,
+            receivedWeightKg: item.receivedWeightKg ?? null,
+            receivedPricePerKg: item.receivedPricePerKg ?? null,
+            incidentType: item.incidentType ?? null,
+            incidentNotes: item.incidentNotes,
+            excludeFromPriceEvolution: Boolean(item.excludeFromPriceEvolution),
+          };
+        })
+        .filter((item) => item.quantity > 0),
+    [editSourceItems, qtyByProductId, supplierProductIds],
+  );
 
-  const items: PedidoOrderItem[] = supplierProducts
-    .map((p) => {
-      const quantity = qtyByProductId[p.id] ?? 0;
-      const prev = existingByProductId.get(p.id);
-      const lineTotal = Math.round(quantity * p.pricePerUnit * 100) / 100;
-      const receivedRaw = prev?.receivedQuantity ?? 0;
-      const receivedQuantity =
-        quantity <= 0 ? 0 : receivedRaw > 0 ? Math.min(receivedRaw, quantity) : 0;
-      const billingSnap =
-        prev != null &&
-        (prev.billingUnit != null ||
-          prev.billingQtyPerOrderUnit != null ||
-          prev.pricePerBillingUnit != null)
-          ? {
-              ...(prev.billingUnit != null ? { billingUnit: prev.billingUnit } : {}),
-              ...(prev.billingQtyPerOrderUnit != null
-                ? { billingQtyPerOrderUnit: prev.billingQtyPerOrderUnit }
-                : {}),
-              ...(prev.pricePerBillingUnit != null ? { pricePerBillingUnit: prev.pricePerBillingUnit } : {}),
-            }
-          : supplierProductHasDistinctBilling(p)
-            ? {
-                billingUnit: p.billingUnit!,
-                ...(p.billingQtyPerOrderUnit != null ? { billingQtyPerOrderUnit: p.billingQtyPerOrderUnit } : {}),
-                ...(p.pricePerBillingUnit != null ? { pricePerBillingUnit: p.pricePerBillingUnit } : {}),
-              }
-            : {};
-      return {
-        id: p.id,
-        supplierProductId: p.id,
-        productName: p.name,
-        unit: p.unit,
-        quantity,
-        receivedQuantity,
-        pricePerUnit: p.pricePerUnit,
-        vatRate: p.vatRate ?? 0,
-        lineTotal,
-        ...billingSnap,
-        ...(unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
-          ? { estimatedKgPerUnit: p.estimatedKgPerUnit }
-          : {}),
-        ...(prev?.basePricePerUnit != null && Number.isFinite(prev.basePricePerUnit)
-          ? { basePricePerUnit: prev.basePricePerUnit }
-          : {}),
-        receivedWeightKg: prev?.receivedWeightKg ?? null,
-        receivedPricePerKg: prev?.receivedPricePerKg ?? null,
-        incidentType: prev?.incidentType ?? null,
-        incidentNotes: prev?.incidentNotes,
-        excludeFromPriceEvolution: Boolean(prev?.excludeFromPriceEvolution),
-      };
-    })
-    .filter((row) => row.quantity > 0);
+  const catalogItems = React.useMemo<PedidoOrderItem[]>(
+    () =>
+      supplierProducts
+        .map((p): PedidoOrderItem => {
+          const quantity = qtyByProductId[p.id] ?? 0;
+          const prev = existingByProductId.get(p.id);
+          const lineTotal = Math.round(quantity * p.pricePerUnit * 100) / 100;
+          const receivedRaw = prev?.receivedQuantity ?? 0;
+          const receivedQuantity =
+            quantity <= 0 ? 0 : receivedRaw > 0 ? Math.min(receivedRaw, quantity) : 0;
+          const billingSnap =
+            prev != null &&
+            (prev.billingUnit != null ||
+              prev.billingQtyPerOrderUnit != null ||
+              prev.pricePerBillingUnit != null)
+              ? {
+                  ...(prev.billingUnit != null ? { billingUnit: prev.billingUnit } : {}),
+                  ...(prev.billingQtyPerOrderUnit != null
+                    ? { billingQtyPerOrderUnit: prev.billingQtyPerOrderUnit }
+                    : {}),
+                  ...(prev.pricePerBillingUnit != null ? { pricePerBillingUnit: prev.pricePerBillingUnit } : {}),
+                }
+              : supplierProductHasDistinctBilling(p)
+                ? {
+                    billingUnit: p.billingUnit!,
+                    ...(p.billingQtyPerOrderUnit != null ? { billingQtyPerOrderUnit: p.billingQtyPerOrderUnit } : {}),
+                    ...(p.pricePerBillingUnit != null ? { pricePerBillingUnit: p.pricePerBillingUnit } : {}),
+                  }
+                : {};
+          return {
+            id: p.id,
+            supplierProductId: p.id,
+            productName: p.name,
+            unit: p.unit,
+            quantity,
+            receivedQuantity,
+            pricePerUnit: p.pricePerUnit,
+            vatRate: p.vatRate ?? 0,
+            lineTotal,
+            ...billingSnap,
+            ...(unitSupportsReceivedWeightKg(p.unit) && p.estimatedKgPerUnit != null && p.estimatedKgPerUnit > 0
+              ? { estimatedKgPerUnit: p.estimatedKgPerUnit }
+              : {}),
+            ...(prev?.basePricePerUnit != null && Number.isFinite(prev.basePricePerUnit)
+              ? { basePricePerUnit: prev.basePricePerUnit }
+              : {}),
+            receivedWeightKg: prev?.receivedWeightKg ?? null,
+            receivedPricePerKg: prev?.receivedPricePerKg ?? null,
+            incidentType: prev?.incidentType ?? null,
+            incidentNotes: prev?.incidentNotes,
+            excludeFromPriceEvolution: Boolean(prev?.excludeFromPriceEvolution),
+          };
+        })
+        .filter((row) => row.quantity > 0),
+    [existingByProductId, qtyByProductId, supplierProducts],
+  );
+
+  const items = React.useMemo<PedidoOrderItem[]>(
+    () => [...catalogItems, ...orphanEditItems],
+    [catalogItems, orphanEditItems],
+  );
 
   const totalBase = items.reduce((acc, row) => acc + row.lineTotal, 0);
   const totalVat = items.reduce((acc, row) => acc + row.lineTotal * row.vatRate, 0);
@@ -1232,7 +1285,7 @@ export default function NuevoPedidoPage() {
       .then((orderId) => {
         const qp = markContentRevisedAfterSent ? 'pedido=actualizado' : 'pedido=borrador';
         resetPedidoFormAfterSuccess();
-        void pullNewOrderIntoStore(orderId);
+        void pullNewOrderIntoStore(orderId, items.length);
         dispatchPedidosDataChanged();
         router.replace(`/pedidos?${qp}`);
       })
@@ -1345,7 +1398,7 @@ export default function NuevoPedidoPage() {
           });
         }
         resetPedidoFormAfterSuccess();
-        void pullNewOrderIntoStore(orderId);
+        void pullNewOrderIntoStore(orderId, items.length);
         dispatchPedidosDataChanged();
         markPedidosUiSkipRestoreOnce();
         router.replace('/pedidos?pedido=enviado');
