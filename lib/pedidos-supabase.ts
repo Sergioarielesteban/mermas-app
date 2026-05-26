@@ -5,6 +5,7 @@ import {
   isMissingPurchaseArticlesError,
   linkPurchaseArticleToNewSupplierProduct,
 } from '@/lib/purchase-articles-supabase';
+import { pedidosDiagLog } from '@/lib/pedidos-page-diag';
 import { comparablePriceDisplayUnit, comparablePriceHistoryPair } from '@/lib/price-evolution-comparable';
 import type { Unit } from '@/lib/types';
 
@@ -367,6 +368,8 @@ export type SupplierProductPriceSample = {
   at: string;
 };
 
+const PURCHASE_ORDER_ITEM_QUERY_CHUNK_SIZE = 60;
+
 type SupplierRow = {
   id: string;
   name: string;
@@ -384,6 +387,17 @@ function isMissingSupabaseColumn(message: string, columnName: string): boolean {
     (m.includes('column') || m.includes('schema cache') || m.includes('does not exist')) && m.includes(col)
   );
 }
+
+function pedidosDataDevLog(phase: string, detail: Record<string, unknown>) {
+  pedidosDiagLog(`PedidosData.${phase}`, detail);
+}
+
+function chunkList<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
 type SupplierDeliveryExceptionRow = {
   supplier_id: string;
   delivery_date: string;
@@ -692,11 +706,57 @@ async function fetchPurchaseOrderItemRows(
   const selFullBase =
     'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes,billing_unit,billing_qty_per_order_unit,price_per_billing_unit';
   const selFull = `${selFullBase},exclude_from_price_evolution`;
-  const runItemSelect = (sel: string) => {
-    let q0 = supabase.from('purchase_order_items').select(sel).in('order_id', ids);
-    if (localId) q0 = q0.eq('local_id', localId);
-    if (signal) q0 = q0.abortSignal(signal);
-    return q0;
+  const queryChunks = async (sel: string, chunkIds: string[], useLocalFilter: boolean) => {
+    const out: OrderItemRow[] = [];
+    for (const chunk of chunkList(chunkIds, PURCHASE_ORDER_ITEM_QUERY_CHUNK_SIZE)) {
+      let q0 = supabase.from('purchase_order_items').select(sel).in('order_id', chunk);
+      if (useLocalFilter && localId) q0 = q0.eq('local_id', localId);
+      if (signal) q0 = q0.abortSignal(signal);
+      const res = await q0;
+      if (res.error) return { data: null, error: res.error };
+      out.push(...((res.data ?? []) as unknown as OrderItemRow[]));
+    }
+    return { data: out, error: null };
+  };
+  const mergeRowsWithOrderIdFallback = (scopedRows: OrderItemRow[], fallbackRows: OrderItemRow[]) => {
+    const byId = new Map(scopedRows.map((row) => [row.id, row]));
+    let addedRows = 0;
+    for (const row of fallbackRows) {
+      if (byId.has(row.id)) continue;
+      byId.set(row.id, row);
+      addedRows += 1;
+    }
+    return { rows: Array.from(byId.values()), addedRows };
+  };
+  const runItemSelect = async (sel: string) => {
+    const scoped = await queryChunks(sel, ids, Boolean(localId));
+    if (scoped.error) {
+      if (localId && isMissingSupabaseColumn(scoped.error.message, 'local_id')) {
+        return queryChunks(sel, ids, false);
+      }
+      return scoped;
+    }
+    if (!localId) return scoped;
+    const scopedRows = scoped.data ?? [];
+    const scopedOrderIds = new Set(scopedRows.map((row) => row.order_id));
+    const missingOrderIds = ids.filter((id) => !scopedOrderIds.has(id));
+    const fallback = await queryChunks(sel, ids, false);
+    if (fallback.error) return scoped;
+    const fallbackRows = fallback.data ?? [];
+    const merged = mergeRowsWithOrderIdFallback(scopedRows, fallbackRows);
+    if (merged.addedRows > 0) {
+      pedidosDataDevLog('purchase_order_items.order_id_fallback', {
+        localId,
+        requestedOrders: ids.length,
+        missingOrders: missingOrderIds.length,
+        scopedRows: scopedRows.length,
+        fallbackRows: fallbackRows.length,
+        addedRows: merged.addedRows,
+        orderIds: missingOrderIds.length > 0 ? missingOrderIds.slice(0, 8) : ids.slice(0, 8),
+      });
+      return { data: merged.rows, error: null };
+    }
+    return scoped;
   };
   let withPricePerKg = await runItemSelect(selFull);
   if (withPricePerKg.error) {
@@ -709,25 +769,16 @@ async function fetchPurchaseOrderItemRows(
     if (isMissingOrderItemBillingColumnsError(withPricePerKg.error.message)) {
       const selNoBill =
         'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,received_price_per_kg,incident_type,incident_notes';
-      let q2 = supabase.from('purchase_order_items').select(selNoBill).in('order_id', ids);
-      if (localId) q2 = q2.eq('local_id', localId);
-      if (signal) q2 = q2.abortSignal(signal);
-      const r2 = await q2;
+      const r2 = await runItemSelect(selNoBill);
       if (r2.error) throw new Error(r2.error.message);
       return (r2.data ?? []) as OrderItemRow[];
     }
     if (!isMissingReceivedPricePerKgColumnError(withPricePerKg.error.message)) {
       throw new Error(withPricePerKg.error.message);
     }
-    let legacy = supabase
-      .from('purchase_order_items')
-      .select(
-        'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
-      )
-      .in('order_id', ids);
-    if (localId) legacy = legacy.eq('local_id', localId);
-    if (signal) legacy = legacy.abortSignal(signal);
-    const legacyRes = await legacy;
+    const legacyRes = await runItemSelect(
+      'id,order_id,supplier_product_id,product_name,unit,quantity,received_quantity,price_per_unit,base_price_per_unit,vat_rate,line_total,estimated_kg_per_unit,received_weight_kg,incident_type,incident_notes',
+    );
     if (legacyRes.error) throw new Error(legacyRes.error.message);
     return (legacyRes.data ?? []) as OrderItemRow[];
   }
@@ -1849,7 +1900,22 @@ export async function fetchOrders(
     orderRows.map((r) => r.created_by).filter((id): id is string => Boolean(id)),
     { signal },
   );
-  return buildPedidoOrdersFromRows(orderRows, itemRows, profileByUserId);
+  const orders = buildPedidoOrdersFromRows(orderRows, itemRows, profileByUserId);
+  pedidosDataDevLog('fetchOrders.list', {
+    localId,
+    source: 'list',
+    orders: orders.length,
+    itemRows: itemRows.length,
+    zeroLineOrders: orders
+      .filter((order) => order.items.length === 0)
+      .slice(0, 8)
+      .map((order) => ({
+        id: order.id,
+        supplier: order.supplierName,
+        status: order.status,
+      })),
+  });
+  return orders;
 }
 
 /**
@@ -1967,6 +2033,17 @@ export async function fetchOrderById(
     row.created_by ? [row.created_by] : [],
   );
   const [order] = buildPedidoOrdersFromRows([row], itemRows, profileByUserId);
+  if (order) {
+    pedidosDataDevLog('fetchOrderById.detail', {
+      localId,
+      source: 'detail',
+      id: order.id,
+      supplier: order.supplierName,
+      status: order.status,
+      lineCount: order.items.length,
+      total: order.items.reduce((sum, item) => sum + item.lineTotal, 0),
+    });
+  }
   return order ?? null;
 }
 
@@ -2159,6 +2236,16 @@ export async function saveOrder(
   },
 ) {
   const nonEmptyItems = payload.items.filter((item) => item.quantity > 0);
+  pedidosDataDevLog('saveOrder.request', {
+    source: 'save',
+    localId,
+    orderId: payload.orderId ?? null,
+    supplierId: payload.supplierId,
+    status: payload.status,
+    receivedItems: payload.items.length,
+    persistedItems: nonEmptyItems.length,
+    total: nonEmptyItems.reduce((sum, item) => sum + item.lineTotal, 0),
+  });
   if (nonEmptyItems.length === 0) {
     throw new Error('No se puede guardar un pedido sin articulos.');
   }

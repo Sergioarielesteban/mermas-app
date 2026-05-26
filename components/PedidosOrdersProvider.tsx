@@ -10,6 +10,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
@@ -23,10 +24,12 @@ import {
 } from '@/lib/pedidos-supabase';
 import { getDemoPedidoOrders } from '@/lib/demo-dataset';
 import { isDemoMode } from '@/lib/demo-mode';
+import { pedidosDiagLog } from '@/lib/pedidos-page-diag';
 import { getSupabaseClient } from '@/lib/supabase-client';
 
 const ordersSessionKey = (localId: string) => `chefone_pedidos_orders:${localId}`;
 const RELOAD_DEBOUNCE_MS = 120;
+const ZERO_LINE_DETAIL_RETRY_LIMIT = 10;
 
 const ORDER_TOMBSTONE_TTL_MS = 8 * 60 * 1000;
 
@@ -73,13 +76,18 @@ function activeOrderTombstoneSet(map: Map<string, number>): Set<string> {
   return new Set(map.keys());
 }
 
+function isPersistedOrderSnapshotUsable(order: PedidoOrder): boolean {
+  if (order.status === 'draft') return true;
+  return order.items.length > 0;
+}
+
 function readOrdersFromSession(localId: string): PedidoOrder[] | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = sessionStorage.getItem(ordersSessionKey(localId));
     if (raw == null) return null;
     const data = JSON.parse(raw) as unknown;
-    return Array.isArray(data) ? (data as PedidoOrder[]) : null;
+    return Array.isArray(data) ? (data as PedidoOrder[]).filter(isPersistedOrderSnapshotUsable) : null;
   } catch {
     return null;
   }
@@ -88,10 +96,48 @@ function readOrdersFromSession(localId: string): PedidoOrder[] | null {
 function writeOrdersToSession(localId: string, rows: PedidoOrder[]) {
   if (typeof window === 'undefined') return;
   try {
-    sessionStorage.setItem(ordersSessionKey(localId), JSON.stringify(rows));
+    sessionStorage.setItem(ordersSessionKey(localId), JSON.stringify(rows.filter(isPersistedOrderSnapshotUsable)));
   } catch {
     /* modo privado / cuota */
   }
+}
+
+async function hydrateZeroLineOrdersFromDetail(
+  supabase: SupabaseClient,
+  localId: string,
+  rows: PedidoOrder[],
+): Promise<PedidoOrder[]> {
+  const targets = rows
+    .filter((order) => order.status !== 'draft' && order.items.length === 0)
+    .slice(0, ZERO_LINE_DETAIL_RETRY_LIMIT);
+  if (targets.length === 0) return rows;
+
+  const detailRows = await Promise.all(
+    targets.map(async (order) => {
+      try {
+        return await fetchOrderById(supabase, localId, order.id);
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const byId = new Map<string, PedidoOrder>();
+  for (const order of detailRows) {
+    if (order && order.items.length > 0) byId.set(order.id, order);
+  }
+  if (byId.size === 0) return rows;
+  pedidosDiagLog('PedidosOrdersProvider.hydrateZeroLineOrdersFromDetail', {
+    source: 'detail-fallback',
+    localId,
+    requested: targets.length,
+    recovered: byId.size,
+    orders: targets.map((order) => ({
+      id: order.id,
+      supplier: order.supplierName,
+      status: order.status,
+    })),
+  });
+  return rows.map((order) => byId.get(order.id) ?? order);
 }
 
 type PedidosOrdersContextValue = {
@@ -169,10 +215,12 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
 
   const upsertOrder = useCallback((order: PedidoOrder) => {
     pinUntilSeenRef.current.add(order.id);
-    setOrders((prev) => {
-      const rest = prev.filter((o) => o.id !== order.id);
-      return [order, ...rest].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    });
+    setOrders((prev) =>
+      upsertPedidoOrderInList(prev, order, {
+        tombstoneIds: activeOrderTombstoneSet(locallyDeletedOrderIdsRef.current),
+        pendingReceivedById: pendingReceivedByIdRef.current,
+      }),
+    );
   }, []);
 
   const reloadOrdersNow = useCallback(() => {
@@ -186,16 +234,32 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
     const ac = new AbortController();
     reloadAbortRef.current = ac;
     void fetchOrders(supabase, targetId, { signal: ac.signal })
-      .then((rows) => {
+      .then(async (rows) => {
         if (ac.signal.aborted) return;
         if (localIdRef.current !== targetId) return;
+        const hydratedRows = await hydrateZeroLineOrdersFromDetail(supabase, targetId, rows);
+        if (ac.signal.aborted) return;
+        if (localIdRef.current !== targetId) return;
+        pedidosDiagLog('PedidosOrdersProvider.reloadOrders.fetchOrders', {
+          source: 'list',
+          localId: targetId,
+          orders: hydratedRows.length,
+          zeroLineOrders: hydratedRows
+            .filter((order) => order.items.length === 0)
+            .slice(0, 8)
+            .map((order) => ({
+              id: order.id,
+              supplier: order.supplierName,
+              status: order.status,
+            })),
+        });
         // No borrar pendingReceived al ver `received`: la primera lectura puede ser correcta y la siguiente
         // (Realtime / 2.º fetch) venir de réplica con `sent` y sin pin el pedido «rebota» a enviados.
         // El pin solo se quita con clearPendingReceivedOrder (p. ej. «Volver a enviados» o archivar en Recepción).
         const tombstones = activeOrderTombstoneSet(locallyDeletedOrderIdsRef.current);
         saveOrderTombstones(targetId, locallyDeletedOrderIdsRef.current);
         setOrders((prev) =>
-          mergePedidoOrdersFromServer(prev, rows, pinUntilSeenRef.current, {
+          mergePedidoOrdersFromServer(prev, hydratedRows, pinUntilSeenRef.current, {
             tombstoneIds: tombstones,
             pendingReceivedById: pendingReceivedByIdRef.current,
           }),
@@ -234,10 +298,26 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
       const rows = await fetchOrders(supabase, targetId, { signal: ac.signal });
       if (ac.signal.aborted) return;
       if (localIdRef.current !== targetId) return;
+      const hydratedRows = await hydrateZeroLineOrdersFromDetail(supabase, targetId, rows);
+      if (ac.signal.aborted) return;
+      if (localIdRef.current !== targetId) return;
+      pedidosDiagLog('PedidosOrdersProvider.reloadOrdersAsync.fetchOrders', {
+        source: 'list',
+        localId: targetId,
+        orders: hydratedRows.length,
+        zeroLineOrders: hydratedRows
+          .filter((order) => order.items.length === 0)
+          .slice(0, 8)
+          .map((order) => ({
+            id: order.id,
+            supplier: order.supplierName,
+            status: order.status,
+          })),
+      });
       const tombstones = activeOrderTombstoneSet(locallyDeletedOrderIdsRef.current);
       saveOrderTombstones(targetId, locallyDeletedOrderIdsRef.current);
       setOrders((prev) =>
-        mergePedidoOrdersFromServer(prev, rows, pinUntilSeenRef.current, {
+        mergePedidoOrdersFromServer(prev, hydratedRows, pinUntilSeenRef.current, {
           tombstoneIds: tombstones,
           pendingReceivedById: pendingReceivedByIdRef.current,
         }),
@@ -274,6 +354,15 @@ export function PedidosOrdersProvider({ children }: { children: React.ReactNode 
               setOrders((prev) => removePedidoOrderFromList(prev, orderId, { tombstoneIds: tombstones }));
               return;
             }
+            pedidosDiagLog('PedidosOrdersProvider.realtime.fetchOrderById', {
+              source: 'detail',
+              localId: lid,
+              id: fresh.id,
+              supplier: fresh.supplierName,
+              status: fresh.status,
+              lineCount: fresh.items.length,
+              total: fresh.items.reduce((sum, item) => sum + item.lineTotal, 0),
+            });
             setOrders((prev) =>
               upsertPedidoOrderInList(prev, fresh, {
                 tombstoneIds: tombstones,

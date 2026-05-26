@@ -4509,7 +4509,8 @@ export default function PedidosPage() {
             </p>
           ) : null}
           {sentOrdersEntregaVista.map((order) => {
-            const totals = totalsWithVatForOrderListDisplay(order);
+            const linesLoaded = order.items.length > 0;
+            const totals = linesLoaded ? totalsWithVatForOrderListDisplay(order) : null;
             const hasAnyBad = order.items.some((item) => {
               const m = quickLineMarks[item.id];
               return m === 'bad' || (m === undefined && Boolean(item.incidentType));
@@ -4637,7 +4638,9 @@ export default function PedidosPage() {
                 <div className="mt-2.5 grid grid-cols-[minmax(0,1fr)_auto_minmax(5.25rem,1fr)] items-center gap-2 border-t border-zinc-100 pt-2">
                   <p className="min-w-0 truncate text-[10px] font-semibold text-zinc-500">
                     {requesterName ? `${requesterName} · ` : ''}
-                    {order.items.length} {order.items.length === 1 ? 'artículo' : 'artículos'}
+                    {linesLoaded
+                      ? `${order.items.length} ${order.items.length === 1 ? 'artículo' : 'artículos'}`
+                      : 'Cargando líneas…'}
                   </p>
                   <button
                     type="button"
@@ -4655,7 +4658,7 @@ export default function PedidosPage() {
                     />
                   </button>
                   <p className="shrink-0 text-right text-[15px] font-black tabular-nums text-emerald-700">
-                    {formatPedidosMoney(totals.total)}
+                    {totals ? formatPedidosMoney(totals.total) : '—'}
                   </p>
                 </div>
 
@@ -4732,7 +4735,12 @@ export default function PedidosPage() {
                       <p className="mt-1 text-sm leading-relaxed text-amber-950">{order.notes.trim()}</p>
                     </div>
                   ) : null}
-                  {order.items.map((item) => {
+                  {!linesLoaded ? (
+                    <div className="rounded-2xl bg-white px-3 py-3 text-center text-[11px] font-semibold text-zinc-500 ring-1 ring-zinc-200">
+                      Recargando líneas del pedido…
+                    </div>
+                  ) : null}
+                  {linesLoaded ? order.items.map((item) => {
                     const mark = quickLineMarks[item.id];
                     const isOk =
                       mark === 'ok' ||
@@ -5143,7 +5151,9 @@ export default function PedidosPage() {
                           </div>
                       </div>
                     );
-                  })}
+                  }) : null}
+                  {linesLoaded ? (
+                    <>
                   {(() => {
                     const tLive = liveSentOrderTotals(
                       order,
@@ -5252,7 +5262,9 @@ export default function PedidosPage() {
                       </div>
                     );
                   })()}
-                  {renderSentOrderReceiveAndIncident(order, { showExpandHint: false })}
+                    </>
+                  ) : null}
+                  {linesLoaded ? renderSentOrderReceiveAndIncident(order, { showExpandHint: false }) : null}
                 </div>
               ) : null}
             </div>
