@@ -99,7 +99,7 @@ export default function EscandallosRecetasLibroClient() {
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
-        fetchCentralKitchenPublicCatalog(supabase).catch(() => [] as EscandalloCentralKitchenCatalogItem[]),
+        fetchCentralKitchenPublicCatalog(supabase, localId).catch(() => [] as EscandalloCentralKitchenCatalogItem[]),
       ]);
       setRecipes(r);
       setRawProducts(raw);
