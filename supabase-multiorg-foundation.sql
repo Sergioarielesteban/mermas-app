@@ -11,6 +11,8 @@
 -- - tablas con local_id / local_central_id reciben organization_id automáticamente.
 -- - RLS existente por local queda reforzada con una política RESTRICTIVE por organization_id.
 -- - RPCs de Cocina Central dejan de buscar "la primera central global" y buscan la central de la organización actual.
+-- - El backfill estructural desactiva triggers USER por tabla para no disparar
+--   recalculos funcionales de la app mientras solo se rellena organization_id.
 --
 -- Importante:
 -- - Esta migración NO activa FORCE RLS, para no romper SECURITY DEFINER RPCs existentes.
@@ -370,40 +372,52 @@ begin
       );
     end if;
 
-    if has_local_id then
-      execute format(
-        'update %s t set organization_id = l.organization_id from public.locals l where t.organization_id is null and t.local_id = l.id',
-        r.fqtn
-      );
-    end if;
+    -- Backfill estructural: no debe disparar triggers funcionales como
+    -- recálculo de alérgenos, costes, stock o sincronizaciones derivadas.
+    execute format('alter table %s disable trigger user', r.fqtn);
 
-    if has_local_central_id then
-      execute format(
-        'update %s t set organization_id = l.organization_id from public.locals l where t.organization_id is null and t.local_central_id = l.id',
-        r.fqtn
-      );
-    end if;
+    begin
+      if has_local_id then
+        execute format(
+          'update %s t set organization_id = l.organization_id from public.locals l where t.organization_id is null and t.local_id = l.id',
+          r.fqtn
+        );
+      end if;
 
-    if has_local_origen_id then
-      execute format(
-        'update %s t set organization_id = l.organization_id from public.locals l where t.organization_id is null and t.local_origen_id = l.id',
-        r.fqtn
-      );
-    end if;
+      if has_local_central_id then
+        execute format(
+          'update %s t set organization_id = l.organization_id from public.locals l where t.organization_id is null and t.local_central_id = l.id',
+          r.fqtn
+        );
+      end if;
 
-    if has_local_solicitante_id then
-      execute format(
-        'update %s t set organization_id = l.organization_id from public.locals l where t.organization_id is null and t.local_solicitante_id = l.id',
-        r.fqtn
-      );
-    end if;
+      if has_local_origen_id then
+        execute format(
+          'update %s t set organization_id = l.organization_id from public.locals l where t.organization_id is null and t.local_origen_id = l.id',
+          r.fqtn
+        );
+      end if;
 
-    if has_local_destino_id then
-      execute format(
-        'update %s t set organization_id = l.organization_id from public.locals l where t.organization_id is null and t.local_destino_id = l.id',
-        r.fqtn
-      );
-    end if;
+      if has_local_solicitante_id then
+        execute format(
+          'update %s t set organization_id = l.organization_id from public.locals l where t.organization_id is null and t.local_solicitante_id = l.id',
+          r.fqtn
+        );
+      end if;
+
+      if has_local_destino_id then
+        execute format(
+          'update %s t set organization_id = l.organization_id from public.locals l where t.organization_id is null and t.local_destino_id = l.id',
+          r.fqtn
+        );
+      end if;
+    exception
+      when others then
+        execute format('alter table %s enable trigger user', r.fqtn);
+        raise;
+    end;
+
+    execute format('alter table %s enable trigger user', r.fqtn);
 
     idx_name := 'idx_' || substr(md5(r.table_name || '_organization_id'), 1, 18) || '_org';
     execute format('create index if not exists %I on %s (organization_id)', idx_name, r.fqtn);
