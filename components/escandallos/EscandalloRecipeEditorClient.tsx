@@ -54,8 +54,8 @@ import {
   fetchEscandalloRawProductsWithWeightedPurchasePrices,
   foodCostPercentOfNetSale,
   insertEscandalloLinesBatch,
-  lineUnitPriceEur,
   recipeTotalCostEur,
+  resolveLineCost,
   saleNetPerUnitFromGross,
   effectiveRecipeYieldQtyForCost,
   subrecipeLineUsesOperationalPortion,
@@ -956,12 +956,17 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                 ) : (
                   <ul className="space-y-1">
                     {sortedLines.map((line) => {
-                      const unitEur = lineUnitPriceEur(line, rawById, processedById, priceInner);
-                      const lineCost = Math.round(line.qty * unitEur * 100) / 100;
+                      const resolvedCost = resolveLineCost(line, rawById, processedById, priceInner);
+                      const unitEur = resolvedCost.unitCost;
+                      const lineCost = resolvedCost.totalCost;
                       const parsed = parseLineLabel(line.label);
                       const inputWeightDetail =
                         line.sourceType === 'raw'
                           ? rawIngredientWeightDetail(line.qty, line.unit, line.rawSupplierProductId ? rawById.get(line.rawSupplierProductId) : null)
+                          : null;
+                      const rawUsageFormat =
+                        line.sourceType === 'raw' && line.rawSupplierProductId && line.usageFormatId
+                          ? rawById.get(line.rawSupplierProductId)?.usageFormats?.find((f) => f.id === line.usageFormatId) ?? null
                           : null;
                       const centralItem =
                         line.sourceType === 'central_kitchen' && line.centralProductionRecipeId
@@ -1010,6 +1015,13 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                                     ? formatUnitPriceEur(centralItem.unitCost, centralItem.outputUnit)
                                     : formatUnitPriceEur(unitEur, line.unit)}
                               </p>
+                              {rawUsageFormat ? (
+                                <p className="text-[9px] font-semibold text-[#4A6B3A]">
+                                  Formato: {rawUsageFormat.name}
+                                </p>
+                              ) : line.sourceType === 'raw' && line.usageFormatId ? (
+                                <p className="text-[9px] font-medium text-[#B8872A]">Formato eliminado del artículo master</p>
+                              ) : null}
                               {inputWeightDetail ? (
                                 <p className="text-[9px] font-medium text-[#7E7468]">{parsed.name} · {inputWeightDetail}</p>
                               ) : null}

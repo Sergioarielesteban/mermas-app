@@ -13,11 +13,16 @@ import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import {
   fetchPurchaseArticles,
+  fetchArticleUsageFormats,
   fetchSupplierCatalogRowsForArticleIds,
   isMissingPurchaseArticlesError,
+  createArticleUsageFormat,
+  deleteArticleUsageFormat,
   setPurchaseArticleActivo,
+  updateArticleUsageFormat,
   updatePurchaseArticleTechnicalFileFields,
   updatePurchaseArticleMasterCostFields,
+  type ArticleUsageFormat,
   type PurchaseArticle,
   type SupplierCatalogRow,
 } from '@/lib/purchase-articles-supabase';
@@ -68,6 +73,7 @@ export default function PedidosArticulosPage() {
 
   const [articles, setArticles] = useState<PurchaseArticle[]>([]);
   const [catalogByArticle, setCatalogByArticle] = useState<Map<string, SupplierCatalogRow[]>>(new Map());
+  const [usageFormatsByArticle, setUsageFormatsByArticle] = useState<Map<string, ArticleUsageFormat[]>>(new Map());
   const [priceSamples, setPriceSamples] = useState<Map<string, SupplierProductPriceSample[]>>(new Map());
   const [escandalloPricingBySupplierProduct, setEscandalloPricingBySupplierProduct] = useState<
     Map<string, { pricePerUnit: number; unit: string; source: string | null }>
@@ -87,6 +93,7 @@ export default function PedidosArticulosPage() {
     if (!localId || !supabaseOk) {
       setArticles([]);
       setCatalogByArticle(new Map());
+      setUsageFormatsByArticle(new Map());
       setPriceSamples(new Map());
       setLoading(false);
       return;
@@ -100,6 +107,7 @@ export default function PedidosArticulosPage() {
       const catalogMap = await fetchSupplierCatalogRowsForArticleIds(supabase, localId, articleIds).catch(
         () => new Map(),
       );
+      const usageFormatsMap = await fetchArticleUsageFormats(supabase, articleIds).catch(() => new Map());
 
       const productIds = [...new Set([...catalogMap.values()].flat().map((r) => r.id))];
       const samples = productIds.length ? await fetchSupplierProductPriceSamples(supabase, localId, productIds) : new Map();
@@ -117,6 +125,7 @@ export default function PedidosArticulosPage() {
 
       setArticles(list);
       setCatalogByArticle(catalogMap);
+      setUsageFormatsByArticle(usageFormatsMap);
       setPriceSamples(samples);
       setEscandalloPricingBySupplierProduct(escPricingMap);
     } catch (e: unknown) {
@@ -128,6 +137,7 @@ export default function PedidosArticulosPage() {
       }
       setArticles([]);
       setCatalogByArticle(new Map());
+      setUsageFormatsByArticle(new Map());
       setPriceSamples(new Map());
       setEscandalloPricingBySupplierProduct(new Map());
     } finally {
@@ -336,6 +346,7 @@ export default function PedidosArticulosPage() {
               key={a.id}
               article={a}
               catalogRows={catalogByArticle.get(a.id) ?? []}
+              usageFormats={usageFormatsByArticle.get(a.id) ?? []}
               priceSamples={priceSamples}
               escandalloPricingBySupplierProduct={escandalloPricingBySupplierProduct}
               onReload={() => void load()}
@@ -356,6 +367,7 @@ export default function PedidosArticulosPage() {
 function ArticleCard({
   article: a,
   catalogRows,
+  usageFormats,
   priceSamples,
   escandalloPricingBySupplierProduct,
   onReload,
@@ -365,6 +377,7 @@ function ArticleCard({
 }: {
   article: PurchaseArticle;
   catalogRows: SupplierCatalogRow[];
+  usageFormats: ArticleUsageFormat[];
   priceSamples: Map<string, SupplierProductPriceSample[]>;
   escandalloPricingBySupplierProduct: Map<string, { pricePerUnit: number; unit: string; source: string | null }>;
   onReload: () => void;
@@ -380,6 +393,16 @@ function ArticleCard({
   const [masterMsg, setMasterMsg] = useState<string | null>(null);
   const [docBusy, setDocBusy] = useState(false);
   const [docMsg, setDocMsg] = useState<string | null>(null);
+  const [formatBusy, setFormatBusy] = useState(false);
+  const [formatMsg, setFormatMsg] = useState<string | null>(null);
+  const [editingFormatId, setEditingFormatId] = useState<string | null>(null);
+  const [formatName, setFormatName] = useState('');
+  const [formatUnit, setFormatUnit] = useState('ud');
+  const [formatPieces, setFormatPieces] = useState('');
+  const [formatWeight, setFormatWeight] = useState('');
+  const [formatWeightUnit, setFormatWeightUnit] = useState('g');
+  const [formatCost, setFormatCost] = useState('');
+  const [formatDefault, setFormatDefault] = useState(false);
   const [docPreviewUrl, setDocPreviewUrl] = useState<string | null>(null);
   const [imageViewerUrl, setImageViewerUrl] = useState<string | null>(null);
   const [refProdId, setRefProdId] = useState(
@@ -601,6 +624,82 @@ function ArticleCard({
     precioFacturacionEur != null && Number.isFinite(factorNum) && factorNum > 0 && Number.isFinite(rendNum)
       ? computeCosteUnitarioUsoEur(precioFacturacionEur, factorNum, rendNum > 0 ? rendNum : 100)
       : null;
+  const parseFormatNumber = (raw: string): number | null => {
+    if (!raw.trim()) return null;
+    const n = Number(raw.trim().replace(/\s/g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  };
+  const resetUsageFormatForm = () => {
+    setEditingFormatId(null);
+    setFormatName('');
+    setFormatUnit('ud');
+    setFormatPieces('');
+    setFormatWeight('');
+    setFormatWeightUnit('g');
+    setFormatCost('');
+    setFormatDefault(false);
+    setFormatMsg(null);
+  };
+  const startEditUsageFormat = (fmt: ArticleUsageFormat) => {
+    setEditingFormatId(fmt.id);
+    setFormatName(fmt.name);
+    setFormatUnit(fmt.usageUnit);
+    setFormatPieces(fmt.piecesPerPurchaseUnit != null ? String(fmt.piecesPerPurchaseUnit) : '');
+    setFormatWeight(fmt.weightPerPiece != null ? String(fmt.weightPerPiece) : '');
+    setFormatWeightUnit(fmt.weightUnit ?? 'g');
+    setFormatCost(String(fmt.costPerUsageUnit));
+    setFormatDefault(fmt.isDefault);
+    setFormatMsg(null);
+  };
+  const saveUsageFormat = async () => {
+    if (!localId || !supabaseOk) return;
+    const cost = parseFormatNumber(formatCost);
+    if (cost == null || cost < 0) {
+      setFormatMsg('Indica un coste válido para el formato.');
+      return;
+    }
+    setFormatBusy(true);
+    setFormatMsg(null);
+    try {
+      const supabase = getSupabaseClient()!;
+      const payload = {
+        name: formatName,
+        usageUnit: formatUnit,
+        piecesPerPurchaseUnit: parseFormatNumber(formatPieces),
+        weightPerPiece: parseFormatNumber(formatWeight),
+        weightUnit: formatWeightUnit.trim() || null,
+        costPerUsageUnit: cost,
+        isDefault: formatDefault,
+      };
+      if (editingFormatId) {
+        await updateArticleUsageFormat(supabase, a.id, editingFormatId, payload);
+      } else {
+        await createArticleUsageFormat(supabase, a.id, payload);
+      }
+      resetUsageFormatForm();
+      onReload();
+    } catch (e: unknown) {
+      setFormatMsg(e instanceof Error ? e.message : 'No se pudo guardar el formato.');
+    } finally {
+      setFormatBusy(false);
+    }
+  };
+  const removeUsageFormat = async (fmt: ArticleUsageFormat) => {
+    if (!localId || !supabaseOk) return;
+    if (!window.confirm(`Eliminar formato "${fmt.name}"? Las líneas existentes mantendrán su coste guardado.`)) return;
+    setFormatBusy(true);
+    setFormatMsg(null);
+    try {
+      const supabase = getSupabaseClient()!;
+      await deleteArticleUsageFormat(supabase, a.id, fmt.id);
+      if (editingFormatId === fmt.id) resetUsageFormatForm();
+      onReload();
+    } catch (e: unknown) {
+      setFormatMsg(e instanceof Error ? e.message : 'No se pudo eliminar el formato.');
+    } finally {
+      setFormatBusy(false);
+    }
+  };
 
   const saveMasterEconomics = async () => {
     if (!localId || !supabaseOk) return;
@@ -994,6 +1093,161 @@ function ArticleCard({
                     Escandallo usa ahora: {precioEscandalloLine} · {precioEscandalloSource}
                   </p>
                 ) : null}
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80">
+            <h3 className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
+              Formatos de uso en cocina
+            </h3>
+            {formatMsg ? (
+              <p className="mt-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-950">
+                {formatMsg}
+              </p>
+            ) : null}
+            {usageFormats.length === 0 ? (
+              <p className="mt-2 rounded-xl bg-zinc-50 px-2.5 py-2 text-[11px] font-semibold text-zinc-500 ring-1 ring-zinc-100">
+                Sin formatos. El escandallo seguirá usando la unidad de uso actual.
+              </p>
+            ) : (
+              <div className="mt-2 space-y-1.5">
+                {usageFormats.map((fmt) => (
+                  <div key={fmt.id} className="rounded-xl bg-zinc-50 p-2 ring-1 ring-zinc-100">
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12px] font-black text-zinc-950">{fmt.name}</p>
+                        <p className="mt-0.5 text-[11px] font-bold tabular-nums text-zinc-700">
+                          {formatUnitPriceEur(fmt.costPerUsageUnit, fmt.usageUnit)}
+                          {fmt.piecesPerPurchaseUnit ? ` · ${fmt.piecesPerPurchaseUnit} uds/compra` : ''}
+                          {fmt.weightPerPiece && fmt.weightUnit ? ` · ${fmt.weightPerPiece} ${fmt.weightUnit}` : ''}
+                        </p>
+                      </div>
+                      {fmt.isDefault ? (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700 ring-1 ring-emerald-100">
+                          Defecto
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        disabled={formatBusy}
+                        onClick={() => startEditUsageFormat(fmt)}
+                        className="h-8 rounded-lg border border-zinc-200 bg-white text-[11px] font-bold text-zinc-700 disabled:opacity-50"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={formatBusy}
+                        onClick={() => void removeUsageFormat(fmt)}
+                        className="h-8 rounded-lg border border-red-100 bg-red-50 text-[11px] font-bold text-red-700 disabled:opacity-50"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-2 rounded-xl border border-zinc-200 bg-[#FAFAF9] p-2">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-400">
+                {editingFormatId ? 'Editar formato' : 'Nuevo formato'}
+              </p>
+              <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                <label className="col-span-2">
+                  <span className="sr-only">Nombre formato</span>
+                  <input
+                    value={formatName}
+                    disabled={formatBusy}
+                    onChange={(e) => setFormatName(e.target.value)}
+                    placeholder="Medallón bocadillo"
+                    className="h-8 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-bold outline-none focus:ring-2 focus:ring-[#D32F2F]/15"
+                  />
+                </label>
+                <label>
+                  <span className="block text-[9px] font-black uppercase text-zinc-400">Unidad</span>
+                  <input
+                    list={`format-units-${a.id}`}
+                    value={formatUnit}
+                    disabled={formatBusy}
+                    onChange={(e) => setFormatUnit(e.target.value)}
+                    className="mt-1 h-8 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-bold outline-none focus:ring-2 focus:ring-[#D32F2F]/15"
+                  />
+                  <datalist id={`format-units-${a.id}`}>
+                    {ESCANDALLO_USAGE_UNIT_PRESETS.map((u) => (
+                      <option key={u} value={u} />
+                    ))}
+                  </datalist>
+                </label>
+                <label>
+                  <span className="block text-[9px] font-black uppercase text-zinc-400">Coste/unit.</span>
+                  <input
+                    value={formatCost}
+                    disabled={formatBusy}
+                    onChange={(e) => setFormatCost(e.target.value)}
+                    className="mt-1 h-8 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-bold tabular-nums outline-none focus:ring-2 focus:ring-[#D32F2F]/15"
+                    inputMode="decimal"
+                  />
+                </label>
+                <label>
+                  <span className="block text-[9px] font-black uppercase text-zinc-400">Piezas/compra</span>
+                  <input
+                    value={formatPieces}
+                    disabled={formatBusy}
+                    onChange={(e) => setFormatPieces(e.target.value)}
+                    placeholder="20"
+                    className="mt-1 h-8 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-bold tabular-nums outline-none focus:ring-2 focus:ring-[#D32F2F]/15"
+                    inputMode="decimal"
+                  />
+                </label>
+                <label>
+                  <span className="block text-[9px] font-black uppercase text-zinc-400">Peso pieza</span>
+                  <div className="mt-1 grid grid-cols-[1fr_3.5rem] gap-1">
+                    <input
+                      value={formatWeight}
+                      disabled={formatBusy}
+                      onChange={(e) => setFormatWeight(e.target.value)}
+                      placeholder="50"
+                      className="h-8 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-bold tabular-nums outline-none focus:ring-2 focus:ring-[#D32F2F]/15"
+                      inputMode="decimal"
+                    />
+                    <input
+                      value={formatWeightUnit}
+                      disabled={formatBusy}
+                      onChange={(e) => setFormatWeightUnit(e.target.value)}
+                      className="h-8 w-full rounded-lg border border-zinc-200 bg-white px-2 text-xs font-bold outline-none focus:ring-2 focus:ring-[#D32F2F]/15"
+                    />
+                  </div>
+                </label>
+              </div>
+              <label className="mt-2 flex items-center gap-2 text-[11px] font-bold text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={formatDefault}
+                  disabled={formatBusy}
+                  onChange={(e) => setFormatDefault(e.target.checked)}
+                />
+                Formato por defecto en escandallos
+              </label>
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  disabled={formatBusy}
+                  onClick={() => void saveUsageFormat()}
+                  className="h-9 rounded-xl bg-[#D32F2F] text-xs font-black text-white disabled:opacity-50"
+                >
+                  {formatBusy ? 'Guardando…' : editingFormatId ? 'Guardar formato' : 'Añadir formato'}
+                </button>
+                <button
+                  type="button"
+                  disabled={formatBusy}
+                  onClick={resetUsageFormatForm}
+                  className="h-9 rounded-xl border border-zinc-200 bg-white text-xs font-black text-zinc-700 disabled:opacity-50"
+                >
+                  Limpiar
+                </button>
               </div>
             </div>
           </section>

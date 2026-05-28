@@ -67,6 +67,9 @@ function displayUnitForRow(
 ): string {
   if (row.sourceType === 'raw' && row.rawId) {
     const rp = sortedRaw.find((x) => x.id === row.rawId);
+    const fmt = selectedUsageFormatForRow(row, rp ?? null);
+    if (fmt) return fmt.usageUnit;
+    if (row.rawUsageFormatId === '__manual_weight__') return row.unit.trim() || 'kg';
     return rp ? escandalloRecipeUnitForRawProduct(rp) : row.unit;
   }
   if (row.sourceType === 'processed' && row.processedId) {
@@ -76,6 +79,18 @@ function displayUnitForRow(
     return centralKitchenProducts.find((x) => x.id === row.centralKitchenId)?.outputUnit ?? row.unit;
   }
   return row.unit.trim() || 'ud';
+}
+
+function defaultUsageFormatForRaw(p: EscandalloRawProduct | null | undefined) {
+  const formats = p?.usageFormats ?? [];
+  return formats.find((f) => f.isDefault) ?? formats[0] ?? null;
+}
+
+function selectedUsageFormatForRow(row: IngredientDraftRow, p: EscandalloRawProduct | null | undefined) {
+  if (!p || row.sourceType !== 'raw' || !row.rawUsageFormatId || row.rawUsageFormatId === '__manual_weight__') {
+    return null;
+  }
+  return p.usageFormats?.find((f) => f.id === row.rawUsageFormatId) ?? null;
 }
 
 type SearchOption = {
@@ -150,7 +165,7 @@ function getStandardPortionPatch(
         ? String(config.quantity)
         : '',
     subRecipeOperationalUnit: config?.unit ?? '',
-    unit: 'ud',
+    unit: 'racion',
   } as const;
 }
 
@@ -276,9 +291,12 @@ export default function EscandalloIngredientDraftEditor({
   };
 
   const selectSearchOption = (row: IngredientDraftRow, option: SearchOption) => {
+    const selectedRaw = option.sourceType === 'raw' ? sortedRaw.find((p) => p.id === option.id) ?? null : null;
+    const defaultFormat = defaultUsageFormatForRaw(selectedRaw);
     updateRow(row.key, {
       sourceType: option.sourceType,
       rawId: option.sourceType === 'raw' ? option.id : '',
+      rawUsageFormatId: option.sourceType === 'raw' && defaultFormat ? defaultFormat.id : '',
       processedId: option.sourceType === 'processed' ? option.id : '',
       subRecipeId: option.sourceType === 'subrecipe' ? option.id : '',
       centralKitchenId: option.sourceType === 'central_kitchen' ? option.id : '',
@@ -286,7 +304,7 @@ export default function EscandalloIngredientDraftEditor({
       rawDropdownOpen: false,
       manualLabel: '',
       manualPrice: '',
-      unit: option.unit,
+      unit: option.sourceType === 'raw' && defaultFormat ? defaultFormat.usageUnit : option.unit,
       qty: row.qty || '1',
       subRecipeUsageMode: option.sourceType === 'subrecipe' ? 'custom' : 'custom',
       subRecipeOperationalQuantity: '',
@@ -318,6 +336,44 @@ export default function EscandalloIngredientDraftEditor({
     if (row.sourceType === 'subrecipe') return Boolean(row.subRecipeId);
     if (row.sourceType === 'central_kitchen') return Boolean(row.centralKitchenId);
     return Boolean(row.manualLabel.trim());
+  };
+
+  const renderUsageFormatSelector = (row: IngredientDraftRow, compact: boolean) => {
+    if (row.sourceType !== 'raw' || !row.rawId) return null;
+    const rawProduct = sortedRaw.find((x) => x.id === row.rawId) ?? null;
+    const formats = rawProduct?.usageFormats ?? [];
+    if (!rawProduct || formats.length === 0) return null;
+    const selected = selectedUsageFormatForRow(row, rawProduct);
+    const className = compact
+      ? 'h-7 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-2 text-[10px] font-bold text-[#0A0908] outline-none focus:border-[#D32F2F]/35'
+      : 'min-h-[44px] w-full rounded-lg border border-zinc-200 bg-white px-2 py-2 text-base font-semibold outline-none focus:border-[#D32F2F]/40 sm:min-h-0 sm:py-1.5 sm:text-sm';
+    return (
+      <div className={compact ? 'mt-1.5 grid gap-1' : 'grid gap-1 sm:max-w-[24rem]'}>
+        <span className={compact ? 'text-[8px] font-black uppercase tracking-[0.12em] text-[#7E7468]' : 'text-[9px] font-bold uppercase text-zinc-500'}>
+          Formato de uso
+        </span>
+        <select
+          value={row.rawUsageFormatId || selected?.id || ''}
+          disabled={disabled}
+          onChange={(e) => {
+            const value = e.target.value;
+            const fmt = formats.find((f) => f.id === value) ?? null;
+            updateRow(row.key, {
+              rawUsageFormatId: value,
+              unit: fmt ? fmt.usageUnit : escandalloRecipeUnitForRawProduct(rawProduct),
+            });
+          }}
+          className={className}
+        >
+          {formats.map((fmt) => (
+            <option key={fmt.id} value={fmt.id}>
+              {fmt.name} · {formatUnitPriceEur(fmt.costPerUsageUnit, fmt.usageUnit)}
+            </option>
+          ))}
+          <option value="__manual_weight__">Usar peso manual · {formatUnitPriceEur(rawProduct.pricePerUnit, rawProduct.pricingUnit ?? rawProduct.unit)}</option>
+        </select>
+      </div>
+    );
   };
 
   const renderCompactDraftRow = (row: IngredientDraftRow) => {
@@ -365,6 +421,7 @@ export default function EscandalloIngredientDraftEditor({
                   updateRow(row.key, {
                     sourceType: e.target.value as IngredientDraftRow['sourceType'],
                     rawId: '',
+                    rawUsageFormatId: '',
                     processedId: '',
                     subRecipeId: '',
                     centralKitchenId: '',
@@ -402,6 +459,7 @@ export default function EscandalloIngredientDraftEditor({
                           rawSearch: e.target.value,
                           rawDropdownOpen: true,
                           rawId: '',
+                          rawUsageFormatId: '',
                           processedId: '',
                           subRecipeId: '',
                           centralKitchenId: '',
@@ -484,6 +542,7 @@ export default function EscandalloIngredientDraftEditor({
                     ) : null}
                   </div>
                 ) : null}
+                {renderUsageFormatSelector(row, true)}
                 {row.sourceType === 'manual' ? (
                   <div className="flex gap-1.5">
                     <input
@@ -518,7 +577,8 @@ export default function EscandalloIngredientDraftEditor({
                     inputMode="decimal"
                   />
                 </label>
-                {row.sourceType === 'central_kitchen' ? (
+                {row.sourceType === 'central_kitchen' ||
+                (row.sourceType === 'raw' && row.rawUsageFormatId === '__manual_weight__') ? (
                   <input
                     list={`esc-draft-units-${row.key}`}
                     value={row.unit}
@@ -661,6 +721,7 @@ export default function EscandalloIngredientDraftEditor({
                     updateRow(row.key, {
                       sourceType: e.target.value as IngredientDraftRow['sourceType'],
                       rawId: '',
+                      rawUsageFormatId: '',
                       processedId: '',
                       subRecipeId: '',
                       centralKitchenId: '',
@@ -699,6 +760,7 @@ export default function EscandalloIngredientDraftEditor({
                           rawSearch: e.target.value,
                           rawDropdownOpen: true,
                           rawId: '',
+                          rawUsageFormatId: '',
                           processedId: '',
                           subRecipeId: '',
                           centralKitchenId: '',
@@ -800,6 +862,7 @@ export default function EscandalloIngredientDraftEditor({
                     ) : null}
                   </div>
                 ) : null}
+                {renderUsageFormatSelector(row, false)}
                 {row.sourceType === 'manual' ? (
                   <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <input
@@ -839,10 +902,7 @@ export default function EscandalloIngredientDraftEditor({
                   <div className="flex min-h-[44px] min-w-0 max-w-full flex-1 flex-col justify-center rounded-lg border border-indigo-100 bg-indigo-50/80 px-2 py-1.5 sm:min-h-0 sm:max-w-[10rem]">
                     <span className="text-[8px] font-bold uppercase text-indigo-800/80">Unidad (catálogo)</span>
                     <span className="break-words text-xs font-semibold text-indigo-950" title="Viene del artículo o del catálogo">
-                      {(() => {
-                        const rp = sortedRaw.find((x) => x.id === row.rawId);
-                        return rp ? escandalloRecipeUnitForRawProduct(rp) : row.unit;
-                      })()}
+                      {dispUnit}
                     </span>
                   </div>
                 ) : null}
@@ -856,6 +916,7 @@ export default function EscandalloIngredientDraftEditor({
                 ) : null}
                 {row.sourceType === 'manual' ||
                 row.sourceType === 'central_kitchen' ||
+                (row.sourceType === 'raw' && row.rawUsageFormatId === '__manual_weight__') ||
                 (row.sourceType === 'subrecipe' && row.subRecipeUsageMode !== 'standard_portion') ? (
                   <>
                     <label className="flex min-w-0 flex-col gap-0.5 sm:max-w-[9rem]">

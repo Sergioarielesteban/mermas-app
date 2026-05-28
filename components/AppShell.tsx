@@ -450,7 +450,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <header
         className={[
-          'sticky top-0 z-40 shrink-0 shadow-lg print:hidden',
+          'sticky top-0 z-40 w-screen shrink-0 shadow-lg print:hidden',
           'border-b border-[#b32020] bg-gradient-to-r from-[#B91C1C] to-[#D32F2F]',
         ].join(' ')}
       >
@@ -501,7 +501,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         aria-hidden={!open}
         onClick={() => setOpen(false)}
         className={[
-          'fixed inset-0 z-50 bg-black/40 transition-opacity print:hidden',
+          'fixed inset-0 z-[85] bg-black/40 transition-opacity print:hidden',
           open ? 'opacity-100' : 'pointer-events-none opacity-0',
         ].join(' ')}
         tabIndex={-1}
@@ -510,7 +510,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Drawer */}
       <aside
         className={[
-          'fixed left-0 top-0 z-[60] flex h-[calc(100dvh-max(5.5rem,env(safe-area-inset-bottom)))] w-[84%] max-w-[320px] flex-col overflow-hidden bg-white shadow-2xl transition-transform print:hidden',
+          'fixed left-0 top-0 z-[90] flex h-[calc(100dvh-max(5.5rem,env(safe-area-inset-bottom)))] w-[84%] max-w-[320px] flex-col overflow-hidden bg-white shadow-2xl transition-transform print:hidden',
           open ? 'translate-x-0' : '-translate-x-full',
         ].join(' ')}
         aria-label="Menú lateral"

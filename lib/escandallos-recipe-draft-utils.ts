@@ -1,8 +1,11 @@
-import { ESCANDALLO_USAGE_UNIT_PRESETS } from '@/lib/escandallo-ingredient-units';
+import {
+  ESCANDALLO_USAGE_UNIT_PRESETS,
+  sanitizeEscandalloIngredientUnit,
+} from '@/lib/escandallo-ingredient-units';
 import type { EscandalloYieldUnit } from '@/lib/escandallo-operational-usage';
 import {
   escandalloRecipeUnitForRawProduct,
-  lineUnitPriceEur,
+  resolveLineCost,
   type EscandalloLine,
   type EscandalloLineInsertPayload,
   type EscandalloRecipePriceContext,
@@ -34,6 +37,7 @@ export type IngredientDraftRow = {
   rawSearch: string;
   rawDropdownOpen: boolean;
   rawId: string;
+  rawUsageFormatId: string;
   processedId: string;
   subRecipeId: string;
   centralKitchenId: string;
@@ -53,6 +57,7 @@ export function emptyIngredientDraft(): IngredientDraftRow {
     rawSearch: '',
     rawDropdownOpen: false,
     rawId: '',
+    rawUsageFormatId: '',
     processedId: '',
     subRecipeId: '',
     centralKitchenId: '',
@@ -86,6 +91,10 @@ export function draftRowsToPayloads(
     const qty = parseDecimal(row.qty);
     if (qty == null || qty <= 0) continue;
     const raw = row.rawId ? rawById.get(row.rawId) : undefined;
+    const selectedRawUsageFormat =
+      row.sourceType === 'raw' && raw && row.rawUsageFormatId && row.rawUsageFormatId !== '__manual_weight__'
+        ? raw.usageFormats?.find((f) => f.id === row.rawUsageFormatId)
+        : undefined;
     const processed = row.processedId ? processedById.get(row.processedId) : undefined;
     const subRec = row.subRecipeId ? recipesById.get(row.subRecipeId) : undefined;
     const centralItem = row.centralKitchenId ? centralKitchenById.get(row.centralKitchenId) : undefined;
@@ -148,16 +157,30 @@ export function draftRowsToPayloads(
       unit:
         row.sourceType === 'raw'
           ? raw
-            ? escandalloRecipeUnitForRawProduct(raw)
+            ? selectedRawUsageFormat
+              ? sanitizeEscandalloIngredientUnit(selectedRawUsageFormat.usageUnit)
+              : row.rawUsageFormatId === '__manual_weight__'
+                ? row.unit
+                : escandalloRecipeUnitForRawProduct(raw)
             : row.unit
           : row.sourceType === 'processed'
             ? processed?.outputUnit ?? row.unit
             : row.unit,
       rawSupplierProductId: row.sourceType === 'raw' ? raw?.id ?? null : null,
+      articleId: row.sourceType === 'raw' ? raw?.articleId ?? null : null,
+      usageFormatId: row.sourceType === 'raw' ? selectedRawUsageFormat?.id ?? null : null,
       processedProductId: row.sourceType === 'processed' ? processed?.id ?? null : null,
       subRecipeId: row.sourceType === 'subrecipe' ? subRec?.id ?? null : null,
       centralProductionRecipeId: row.sourceType === 'central_kitchen' ? centralItem?.id ?? null : null,
       manualPricePerUnit: row.sourceType === 'manual' ? manual : null,
+      unitCostSnapshotEur:
+        row.sourceType === 'raw' && selectedRawUsageFormat
+          ? Math.round(selectedRawUsageFormat.costPerUsageUnit * 1000000) / 1000000
+          : null,
+      totalCostSnapshotEur:
+        row.sourceType === 'raw' && selectedRawUsageFormat
+          ? Math.round(qty * selectedRawUsageFormat.costPerUsageUnit * 1000000) / 1000000
+          : null,
       subRecipeUsageMode,
       subRecipeOperationalQuantity,
       subRecipeOperationalUnit,
@@ -189,6 +212,8 @@ export function estimateDraftRowCostEur(
     recipeId: rid,
     sourceType: p.sourceType,
     rawSupplierProductId: p.rawSupplierProductId ?? null,
+    articleId: p.articleId ?? null,
+    usageFormatId: p.usageFormatId ?? null,
     processedProductId: p.processedProductId ?? null,
     subRecipeId: p.subRecipeId ?? null,
     centralProductionRecipeId: p.centralProductionRecipeId ?? null,
@@ -196,6 +221,8 @@ export function estimateDraftRowCostEur(
     qty: p.qty,
     unit: p.unit,
     manualPricePerUnit: p.manualPricePerUnit ?? null,
+    unitCostSnapshotEur: p.unitCostSnapshotEur ?? null,
+    totalCostSnapshotEur: p.totalCostSnapshotEur ?? null,
     subRecipeUsageMode: p.subRecipeUsageMode ?? null,
     subRecipeOperationalQuantity: p.subRecipeOperationalQuantity ?? null,
     subRecipeOperationalUnit: p.subRecipeOperationalUnit ?? null,
@@ -209,15 +236,15 @@ export function estimateDraftRowCostEur(
     centralKitchenById,
     recipeId: rid,
   };
-  const unit = lineUnitPriceEur(tempLine, rawById, processedById, {
+  const resolved = resolveLineCost(tempLine, rawById, processedById, {
     linesByRecipe: priceCtx.linesByRecipe,
     recipesById: priceCtx.recipesById,
     technicalSheetsByRecipe: priceCtx.technicalSheetsByRecipe,
     centralKitchenById: priceCtx.centralKitchenById,
     expanding: new Set<string>([rid]),
   });
-  if (!Number.isFinite(unit)) return null;
-  return Math.round(qty * unit * 100) / 100;
+  if (!Number.isFinite(resolved.totalCost)) return null;
+  return resolved.totalCost;
 }
 
 /** Líneas sintéticas para calcular coste en el asistente (antes de guardar en BD). */
@@ -231,6 +258,8 @@ export function insertPayloadsToTempLines(
     recipeId,
     sourceType: p.sourceType,
     rawSupplierProductId: p.rawSupplierProductId ?? null,
+    articleId: p.articleId ?? null,
+    usageFormatId: p.usageFormatId ?? null,
     processedProductId: p.processedProductId ?? null,
     subRecipeId: p.subRecipeId ?? null,
     centralProductionRecipeId: p.centralProductionRecipeId ?? null,
@@ -238,6 +267,8 @@ export function insertPayloadsToTempLines(
     qty: p.qty,
     unit: p.unit,
     manualPricePerUnit: p.manualPricePerUnit ?? null,
+    unitCostSnapshotEur: p.unitCostSnapshotEur ?? null,
+    totalCostSnapshotEur: p.totalCostSnapshotEur ?? null,
     subRecipeUsageMode: p.subRecipeUsageMode ?? null,
     subRecipeOperationalQuantity: p.subRecipeOperationalQuantity ?? null,
     subRecipeOperationalUnit: p.subRecipeOperationalUnit ?? null,

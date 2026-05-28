@@ -17,7 +17,11 @@ import {
 import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet-supabase';
 import { formatUnitPriceEur, roundMoney } from '@/lib/money-format';
 import { resolveOperationalPrice, type OperationalPriceSource } from '@/lib/operational-price';
-import { fetchPurchaseArticleCostHintsByIds } from '@/lib/purchase-articles-supabase';
+import {
+  fetchArticleUsageFormats,
+  fetchPurchaseArticleCostHintsByIds,
+  type ArticleUsageFormat,
+} from '@/lib/purchase-articles-supabase';
 import type { VolumeConversionUnit, WeightConversionUnit } from '@/lib/escandallo-input-weight';
 import { fetchWeightedAvgHistoricoComparableBySupplierProductIds } from '@/lib/pedidos-supabase';
 import type { Unit } from '@/lib/types';
@@ -51,6 +55,8 @@ export type EscandalloLine = {
   recipeId: string;
   sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe' | 'central_kitchen';
   rawSupplierProductId: string | null;
+  articleId?: string | null;
+  usageFormatId?: string | null;
   processedProductId: string | null;
   subRecipeId: string | null;
   centralProductionRecipeId: string | null;
@@ -58,6 +64,8 @@ export type EscandalloLine = {
   qty: number;
   unit: EscandalloIngredientUnit;
   manualPricePerUnit: number | null;
+  unitCostSnapshotEur?: number | null;
+  totalCostSnapshotEur?: number | null;
   subRecipeUsageMode: 'custom' | 'standard_portion' | null;
   subRecipeOperationalQuantity: number | null;
   subRecipeOperationalUnit: EscandalloYieldUnit | null;
@@ -113,6 +121,8 @@ export type EscandalloRawProduct = {
   internalCostPerUsageUnitEur?: number | null;
   /** Texto de `purchase_articles.unidad_uso` (debe coincidir con la unidad de la línea para aplicar coste interno). */
   internalUsageUnitLabel?: string | null;
+  /** Formatos operativos configurados en Articulo Master. Si se elige uno, prevalece sobre el calculo legacy. */
+  usageFormats?: ArticleUsageFormat[];
   /** Conversión opcional por artículo: volumen usado en escandallo → peso equivalente para entrada/merma. */
   conversionToWeightEnabled?: boolean | null;
   conversionWeightUnit?: WeightConversionUnit | null;
@@ -186,6 +196,8 @@ type LineRow = {
   recipe_id: string;
   source_type: 'raw' | 'processed' | 'manual' | 'subrecipe' | 'central_kitchen' | null;
   raw_supplier_product_id: string | null;
+  article_id?: string | null;
+  usage_format_id?: string | null;
   processed_product_id: string | null;
   sub_recipe_id: string | null;
   central_production_recipe_id?: string | null;
@@ -193,6 +205,8 @@ type LineRow = {
   qty: number;
   unit: string;
   manual_price_per_unit: number | null;
+  unit_cost?: number | null;
+  total_cost?: number | null;
   sub_recipe_usage_mode?: string | null;
   sub_recipe_operational_quantity?: number | null;
   sub_recipe_operational_unit?: string | null;
@@ -284,6 +298,8 @@ function mapLine(row: LineRow): EscandalloLine {
     recipeId: row.recipe_id,
     sourceType,
     rawSupplierProductId: row.raw_supplier_product_id,
+    articleId: row.article_id ?? null,
+    usageFormatId: row.usage_format_id ?? null,
     processedProductId: row.processed_product_id,
     subRecipeId: row.sub_recipe_id ?? null,
     centralProductionRecipeId: row.central_production_recipe_id ?? null,
@@ -294,6 +310,10 @@ function mapLine(row: LineRow): EscandalloLine {
       row.manual_price_per_unit != null && Number.isFinite(Number(row.manual_price_per_unit))
         ? Number(row.manual_price_per_unit)
         : null,
+    unitCostSnapshotEur:
+      row.unit_cost != null && Number.isFinite(Number(row.unit_cost)) ? Number(row.unit_cost) : null,
+    totalCostSnapshotEur:
+      row.total_cost != null && Number.isFinite(Number(row.total_cost)) ? Number(row.total_cost) : null,
     subRecipeUsageMode:
       row.sub_recipe_usage_mode === 'custom' || row.sub_recipe_usage_mode === 'standard_portion'
         ? row.sub_recipe_usage_mode
@@ -354,7 +374,7 @@ export async function fetchEscandalloLines(
   recipeId: string,
 ): Promise<EscandalloLine[]> {
   const selectFull =
-    'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,central_production_recipe_id,label,qty,unit,manual_price_per_unit,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at';
+    'id,local_id,recipe_id,source_type,raw_supplier_product_id,article_id,usage_format_id,processed_product_id,sub_recipe_id,central_production_recipe_id,label,qty,unit,manual_price_per_unit,unit_cost,total_cost,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at';
   const selectLegacy =
     'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,label,qty,unit,manual_price_per_unit,sort_order,created_at';
   const { data, error } = await supabase
@@ -465,14 +485,19 @@ export async function fetchEscandalloRawProductsWithWeightedPurchasePrices(
     return { ...p, pricePerUnit: resolved.price ?? 0, operationalPriceSource: resolved.source };
   });
   const articleIds = withPmp.map((p) => p.articleId).filter((x): x is string => Boolean(x));
-  const hints = await fetchPurchaseArticleCostHintsByIds(supabase, localId, articleIds);
+  const [hints, formatsByArticle] = await Promise.all([
+    fetchPurchaseArticleCostHintsByIds(supabase, localId, articleIds),
+    fetchArticleUsageFormats(supabase, articleIds),
+  ]);
   return withPmp.map((p) => {
-    if (!p.articleId) return p;
+    const formats = p.articleId ? formatsByArticle.get(p.articleId) ?? [] : [];
+    if (!p.articleId) return formats.length ? { ...p, usageFormats: formats } : p;
     const h = hints.get(p.articleId);
-    if (!h) return p;
+    if (!h) return { ...p, usageFormats: formats };
     const label = h.unidadUso?.trim().replace(/\s+/g, ' ') ?? '';
     const next: EscandalloRawProduct = {
       ...p,
+      usageFormats: formats,
       internalUsageUnitLabel: label || (p.internalUsageUnitLabel ?? null),
       conversionToWeightEnabled: h.conversionToWeightEnabled,
       conversionWeightUnit: h.conversionWeightUnit,
@@ -761,10 +786,14 @@ export async function insertEscandalloLine(
     qty: number;
     unit: EscandalloIngredientUnit;
     rawSupplierProductId?: string | null;
+    articleId?: string | null;
+    usageFormatId?: string | null;
     processedProductId?: string | null;
     subRecipeId?: string | null;
     centralProductionRecipeId?: string | null;
     manualPricePerUnit?: number | null;
+    unitCostSnapshotEur?: number | null;
+    totalCostSnapshotEur?: number | null;
     subRecipeUsageMode?: 'custom' | 'standard_portion' | null;
     subRecipeOperationalQuantity?: number | null;
     subRecipeOperationalUnit?: EscandalloYieldUnit | null;
@@ -782,6 +811,8 @@ export async function insertEscandalloLine(
       source_type: payload.sourceType,
       raw_supplier_product_id:
         payload.sourceType === 'raw' ? (payload.rawSupplierProductId ?? null) : null,
+      article_id: payload.sourceType === 'raw' ? (payload.articleId ?? null) : null,
+      usage_format_id: payload.sourceType === 'raw' ? (payload.usageFormatId ?? null) : null,
       processed_product_id:
         payload.sourceType === 'processed' ? (payload.processedProductId ?? null) : null,
       sub_recipe_id: payload.sourceType === 'subrecipe' ? (payload.subRecipeId ?? null) : null,
@@ -796,6 +827,18 @@ export async function insertEscandalloLine(
         Number.isFinite(payload.manualPricePerUnit)
           ? Math.round(payload.manualPricePerUnit * 10000) / 10000
           : null,
+      unit_cost:
+        payload.sourceType === 'raw' &&
+        payload.unitCostSnapshotEur != null &&
+        Number.isFinite(payload.unitCostSnapshotEur)
+          ? Math.round(payload.unitCostSnapshotEur * 1000000) / 1000000
+          : null,
+      total_cost:
+        payload.sourceType === 'raw' &&
+        payload.totalCostSnapshotEur != null &&
+        Number.isFinite(payload.totalCostSnapshotEur)
+          ? Math.round(payload.totalCostSnapshotEur * 1000000) / 1000000
+          : null,
       sub_recipe_usage_mode:
         payload.sourceType === 'subrecipe' ? (payload.subRecipeUsageMode ?? null) : null,
       sub_recipe_operational_quantity:
@@ -809,7 +852,7 @@ export async function insertEscandalloLine(
       sort_order: payload.sortOrder ?? 0,
     })
     .select(
-      'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,central_production_recipe_id,label,qty,unit,manual_price_per_unit,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at',
+      'id,local_id,recipe_id,source_type,raw_supplier_product_id,article_id,usage_format_id,processed_product_id,sub_recipe_id,central_production_recipe_id,label,qty,unit,manual_price_per_unit,unit_cost,total_cost,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at',
     )
     .single();
   if (error) {
@@ -853,10 +896,14 @@ export type EscandalloLineInsertPayload = {
   qty: number;
   unit: EscandalloIngredientUnit;
   rawSupplierProductId?: string | null;
+  articleId?: string | null;
+  usageFormatId?: string | null;
   processedProductId?: string | null;
   subRecipeId?: string | null;
   centralProductionRecipeId?: string | null;
   manualPricePerUnit?: number | null;
+  unitCostSnapshotEur?: number | null;
+  totalCostSnapshotEur?: number | null;
   subRecipeUsageMode?: 'custom' | 'standard_portion' | null;
   subRecipeOperationalQuantity?: number | null;
   subRecipeOperationalUnit?: EscandalloYieldUnit | null;
@@ -880,6 +927,8 @@ export async function insertEscandalloLinesBatch(
       source_type: payload.sourceType,
       raw_supplier_product_id:
         payload.sourceType === 'raw' ? (payload.rawSupplierProductId ?? null) : null,
+      article_id: payload.sourceType === 'raw' ? (payload.articleId ?? null) : null,
+      usage_format_id: payload.sourceType === 'raw' ? (payload.usageFormatId ?? null) : null,
       processed_product_id:
         payload.sourceType === 'processed' ? (payload.processedProductId ?? null) : null,
       sub_recipe_id: payload.sourceType === 'subrecipe' ? (payload.subRecipeId ?? null) : null,
@@ -893,6 +942,18 @@ export async function insertEscandalloLinesBatch(
         payload.manualPricePerUnit != null &&
         Number.isFinite(payload.manualPricePerUnit)
           ? Math.round(payload.manualPricePerUnit * 10000) / 10000
+          : null,
+      unit_cost:
+        payload.sourceType === 'raw' &&
+        payload.unitCostSnapshotEur != null &&
+        Number.isFinite(payload.unitCostSnapshotEur)
+          ? Math.round(payload.unitCostSnapshotEur * 1000000) / 1000000
+          : null,
+      total_cost:
+        payload.sourceType === 'raw' &&
+        payload.totalCostSnapshotEur != null &&
+        Number.isFinite(payload.totalCostSnapshotEur)
+          ? Math.round(payload.totalCostSnapshotEur * 1000000) / 1000000
           : null,
       sub_recipe_usage_mode:
         payload.sourceType === 'subrecipe' ? (payload.subRecipeUsageMode ?? null) : null,
@@ -911,7 +972,7 @@ export async function insertEscandalloLinesBatch(
     .from('escandallo_recipe_lines')
     .insert(rows)
     .select(
-      'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,central_production_recipe_id,label,qty,unit,manual_price_per_unit,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at',
+      'id,local_id,recipe_id,source_type,raw_supplier_product_id,article_id,usage_format_id,processed_product_id,sub_recipe_id,central_production_recipe_id,label,qty,unit,manual_price_per_unit,unit_cost,total_cost,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at',
     );
   if (error) {
     const legacy = await supabase
@@ -920,6 +981,10 @@ export async function insertEscandalloLinesBatch(
         rows.map((row) => {
           const next: Record<string, unknown> = { ...row };
           delete next.central_production_recipe_id;
+          delete next.article_id;
+          delete next.usage_format_id;
+          delete next.unit_cost;
+          delete next.total_cost;
           delete next.sub_recipe_usage_mode;
           delete next.sub_recipe_operational_quantity;
           delete next.sub_recipe_operational_unit;
@@ -945,10 +1010,14 @@ export async function updateEscandalloLine(
     unit: EscandalloIngredientUnit;
     sourceType: 'raw' | 'processed' | 'manual' | 'subrecipe' | 'central_kitchen';
     rawSupplierProductId: string | null;
+    articleId: string | null;
+    usageFormatId: string | null;
     processedProductId: string | null;
     subRecipeId: string | null;
     centralProductionRecipeId: string | null;
     manualPricePerUnit: number | null;
+    unitCostSnapshotEur: number | null;
+    totalCostSnapshotEur: number | null;
     subRecipeUsageMode: 'custom' | 'standard_portion' | null;
     subRecipeOperationalQuantity: number | null;
     subRecipeOperationalUnit: EscandalloYieldUnit | null;
@@ -961,6 +1030,8 @@ export async function updateEscandalloLine(
   if (patch.unit !== undefined) row.unit = sanitizeEscandalloIngredientUnit(patch.unit);
   if (patch.sourceType !== undefined) row.source_type = patch.sourceType;
   if (patch.rawSupplierProductId !== undefined) row.raw_supplier_product_id = patch.rawSupplierProductId;
+  if (patch.articleId !== undefined) row.article_id = patch.articleId;
+  if (patch.usageFormatId !== undefined) row.usage_format_id = patch.usageFormatId;
   if (patch.processedProductId !== undefined) row.processed_product_id = patch.processedProductId;
   if (patch.subRecipeId !== undefined) row.sub_recipe_id = patch.subRecipeId;
   if (patch.centralProductionRecipeId !== undefined) row.central_production_recipe_id = patch.centralProductionRecipeId;
@@ -968,6 +1039,18 @@ export async function updateEscandalloLine(
     row.manual_price_per_unit =
       patch.manualPricePerUnit != null && Number.isFinite(patch.manualPricePerUnit)
         ? Math.round(patch.manualPricePerUnit * 10000) / 10000
+        : null;
+  }
+  if (patch.unitCostSnapshotEur !== undefined) {
+    row.unit_cost =
+      patch.unitCostSnapshotEur != null && Number.isFinite(patch.unitCostSnapshotEur)
+        ? Math.round(patch.unitCostSnapshotEur * 1000000) / 1000000
+        : null;
+  }
+  if (patch.totalCostSnapshotEur !== undefined) {
+    row.total_cost =
+      patch.totalCostSnapshotEur != null && Number.isFinite(patch.totalCostSnapshotEur)
+        ? Math.round(patch.totalCostSnapshotEur * 1000000) / 1000000
         : null;
   }
   if (patch.subRecipeUsageMode !== undefined) row.sub_recipe_usage_mode = patch.subRecipeUsageMode;
@@ -987,6 +1070,10 @@ export async function updateEscandalloLine(
   if (!error) return;
   const fallbackRow = { ...row };
   delete fallbackRow.central_production_recipe_id;
+  delete fallbackRow.article_id;
+  delete fallbackRow.usage_format_id;
+  delete fallbackRow.unit_cost;
+  delete fallbackRow.total_cost;
   delete fallbackRow.sub_recipe_usage_mode;
   delete fallbackRow.sub_recipe_operational_quantity;
   delete fallbackRow.sub_recipe_operational_unit;
@@ -1016,12 +1103,12 @@ function recipeLinesTotalRecursive(
   expanding.add(recipeId);
   let sum = 0;
   for (const line of linesByRecipe[recipeId] ?? []) {
-    sum += line.qty * lineUnitPriceEur(line, rawProductById, processedById, {
+    sum += resolveLineCost(line, rawProductById, processedById, {
       linesByRecipe,
       recipesById,
       centralKitchenById,
       expanding,
-    });
+    }).totalCost;
   }
   expanding.delete(recipeId);
   return Math.round(sum * 100) / 100;
@@ -1066,29 +1153,7 @@ function subrecipeYieldUnitPriceFromSheet(
     if (sheet.operationalCost != null && Number.isFinite(sheet.operationalCost) && sheet.operationalCost >= 0) {
       return roundMoney(sheet.operationalCost);
     }
-    const yieldUnit = sheet.yieldUnit;
-    if (!yieldUnit) return null;
-    const yieldQty =
-      sheet.yieldQuantity != null && Number.isFinite(sheet.yieldQuantity) && sheet.yieldQuantity > 0
-        ? sheet.yieldQuantity
-        : subRecipe.finalWeightQty != null && Number.isFinite(subRecipe.finalWeightQty) && subRecipe.finalWeightQty > 0
-          ? subRecipe.finalWeightQty
-          : null;
-    if (yieldQty == null) return null;
-    const costPerUnit =
-      sheet.yieldCostPerUnit != null && Number.isFinite(sheet.yieldCostPerUnit) && sheet.yieldCostPerUnit >= 0
-        ? sheet.yieldCostPerUnit
-        : computeYieldCostPerUnit(sheet.yieldCostTotal, yieldQty);
-    if (costPerUnit == null) return null;
-    const quantity =
-      line.subRecipeOperationalQuantity != null &&
-      Number.isFinite(line.subRecipeOperationalQuantity) &&
-      line.subRecipeOperationalQuantity > 0
-        ? line.subRecipeOperationalQuantity
-        : sheet.operationalQuantity;
-    const unit = line.subRecipeOperationalUnit ?? sheet.operationalUnit;
-    const cost = computeOperationalCost(costPerUnit, yieldUnit, quantity, unit);
-    return cost != null ? roundMoney(cost) : null;
+    return 0;
   }
   const yieldUnit = sheet.yieldUnit;
   if (!yieldUnit) return null;
@@ -1108,6 +1173,81 @@ function subrecipeYieldUnitPriceFromSheet(
   return perRequestedUnit != null ? roundMoney(perRequestedUnit) : null;
 }
 
+export type ResolvedEscandalloLineCost = {
+  displayUnit: string;
+  unitCost: number;
+  totalCost: number;
+  costBasis: 'operational_cost' | 'yield_cost_per_unit' | 'raw' | 'processed' | 'manual' | 'central_kitchen' | 'missing';
+  detailLabel: string;
+};
+
+function resolveSubrecipeStandardPortionCost(
+  line: EscandalloLine,
+  sheet: EscandalloTechnicalSheet | undefined,
+): ResolvedEscandalloLineCost | null {
+  if (line.sourceType !== 'subrecipe' || line.subRecipeUsageMode !== 'standard_portion') return null;
+  if (!sheet) {
+    return {
+      displayUnit: 'ración',
+      unitCost: 0,
+      totalCost: 0,
+      costBasis: 'missing',
+      detailLabel: 'Uso operativo pendiente',
+    };
+  }
+  const unitCost =
+    sheet.operationalCost != null && Number.isFinite(sheet.operationalCost) && sheet.operationalCost >= 0
+      ? roundMoney(sheet.operationalCost)
+      : 0;
+  const detailParts: string[] = [];
+  if (sheet.operationalQuantity != null && sheet.operationalUnit) {
+    detailParts.push(`${sheet.operationalQuantity} ${sheet.operationalUnit}`);
+  }
+  if (sheet.yieldCostPerUnit != null && sheet.yieldUnit) {
+    detailParts.push(formatUnitPriceEur(sheet.yieldCostPerUnit, sheet.yieldUnit));
+  }
+  return {
+    displayUnit: 'ración',
+    unitCost,
+    totalCost: roundMoney(line.qty * unitCost),
+    costBasis: unitCost > 0 ? 'operational_cost' : 'missing',
+    detailLabel: unitCost > 0 ? detailParts.join(' · ') || 'Ración estándar' : 'Uso operativo pendiente',
+  };
+}
+
+export function resolveLineCost(
+  line: EscandalloLine,
+  rawProductById: Map<string, EscandalloRawProduct>,
+  processedById: Map<string, EscandalloProcessedProduct>,
+  innerCtx?: LinePriceInnerContext,
+): ResolvedEscandalloLineCost {
+  const standard = resolveSubrecipeStandardPortionCost(
+    line,
+    line.subRecipeId ? innerCtx?.technicalSheetsByRecipe?.get(line.subRecipeId) : undefined,
+  );
+  if (standard) return standard;
+  const unitCost = lineUnitPriceEur(line, rawProductById, processedById, innerCtx);
+  const costBasis: ResolvedEscandalloLineCost['costBasis'] =
+    line.sourceType === 'subrecipe'
+      ? 'yield_cost_per_unit'
+      : line.sourceType === 'raw'
+        ? 'raw'
+        : line.sourceType === 'processed'
+          ? 'processed'
+          : line.sourceType === 'central_kitchen'
+            ? 'central_kitchen'
+            : line.sourceType === 'manual'
+              ? 'manual'
+              : 'missing';
+  return {
+    displayUnit: line.unit,
+    unitCost,
+    totalCost: roundMoney(line.qty * unitCost),
+    costBasis,
+    detailLabel: formatUnitPriceEur(unitCost, line.unit),
+  };
+}
+
 /** Precio unitario efectivo para coste (crudo, elaborado 1-ingrediente, sub-receta o manual). */
 export function lineUnitPriceEur(
   line: EscandalloLine,
@@ -1118,6 +1258,11 @@ export function lineUnitPriceEur(
   if (line.sourceType === 'subrecipe' && line.subRecipeId && innerCtx) {
     const sub = innerCtx.recipesById.get(line.subRecipeId);
     if (!sub) return 0;
+    const standard = resolveSubrecipeStandardPortionCost(
+      line,
+      innerCtx.technicalSheetsByRecipe?.get(line.subRecipeId),
+    );
+    if (standard) return standard.unitCost;
     const sheetPrice = subrecipeYieldUnitPriceFromSheet(
       line,
       sub,
@@ -1137,6 +1282,14 @@ export function lineUnitPriceEur(
     return denom > 0 ? roundMoney(total / denom) : 0;
   }
   if (line.sourceType === 'raw' && line.rawSupplierProductId) {
+    if (
+      line.usageFormatId &&
+      line.unitCostSnapshotEur != null &&
+      Number.isFinite(line.unitCostSnapshotEur) &&
+      line.unitCostSnapshotEur >= 0
+    ) {
+      return roundMoney(line.unitCostSnapshotEur);
+    }
     const p = rawProductById.get(line.rawSupplierProductId);
     if (p) return rawSupplierLineUnitPriceEur(line, p);
   }
@@ -1188,7 +1341,7 @@ export function recipeTotalCostEur(
     : undefined;
   let sum = 0;
   for (const line of lines) {
-    sum += line.qty * lineUnitPriceEur(line, rawProductById, processedById, innerCtx);
+    sum += resolveLineCost(line, rawProductById, processedById, innerCtx).totalCost;
   }
   return Math.round(sum * 100) / 100;
 }

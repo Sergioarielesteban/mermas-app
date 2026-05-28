@@ -62,6 +62,31 @@ export type PurchaseArticleCostHint = {
   conversionFactor: number | null;
 };
 
+export type ArticleUsageFormat = {
+  id: string;
+  articleId: string;
+  organizationId: string | null;
+  name: string;
+  usageUnit: string;
+  piecesPerPurchaseUnit: number | null;
+  weightPerPiece: number | null;
+  weightUnit: string | null;
+  costPerUsageUnit: number;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ArticleUsageFormatInput = {
+  name: string;
+  usageUnit: string;
+  piecesPerPurchaseUnit?: number | null;
+  weightPerPiece?: number | null;
+  weightUnit?: string | null;
+  costPerUsageUnit: number;
+  isDefault?: boolean;
+};
+
 export type PurchaseArticleDuplicateCandidate = {
   articleIdA: string;
   articleIdB: string;
@@ -93,6 +118,152 @@ export function labelMetodoCosteMaster(code: string | null | undefined): string 
   if (c === 'alta_proveedor') return 'Alta en catálogo proveedor';
   if (c === 'cocina_central') return 'Cocina Central';
   return code;
+}
+
+function mapArticleUsageFormatRow(row: Record<string, unknown>): ArticleUsageFormat {
+  return {
+    id: String(row.id),
+    articleId: String(row.article_id),
+    organizationId: row.organization_id != null ? String(row.organization_id) : null,
+    name: String(row.name ?? ''),
+    usageUnit: String(row.usage_unit ?? ''),
+    piecesPerPurchaseUnit:
+      row.pieces_per_purchase_unit != null && Number.isFinite(Number(row.pieces_per_purchase_unit))
+        ? Number(row.pieces_per_purchase_unit)
+        : null,
+    weightPerPiece:
+      row.weight_per_piece != null && Number.isFinite(Number(row.weight_per_piece))
+        ? Number(row.weight_per_piece)
+        : null,
+    weightUnit: row.weight_unit != null ? String(row.weight_unit) : null,
+    costPerUsageUnit:
+      row.cost_per_usage_unit != null && Number.isFinite(Number(row.cost_per_usage_unit))
+        ? Number(row.cost_per_usage_unit)
+        : 0,
+    isDefault: Boolean(row.is_default),
+    createdAt: String(row.created_at ?? ''),
+    updatedAt: String(row.updated_at ?? ''),
+  };
+}
+
+function articleUsageFormatRow(input: ArticleUsageFormatInput): Record<string, unknown> {
+  const name = input.name.trim().replace(/\s+/g, ' ');
+  const usageUnit = input.usageUnit.trim().replace(/\s+/g, ' ');
+  const weightUnit = input.weightUnit?.trim().replace(/\s+/g, ' ') || null;
+  if (!name) throw new Error('Indica el nombre del formato.');
+  const unitError = validateEscandalloUsageUnitInput(usageUnit);
+  if (unitError) throw new Error(unitError);
+  if (input.costPerUsageUnit == null || !Number.isFinite(input.costPerUsageUnit) || input.costPerUsageUnit < 0) {
+    throw new Error('Coste por unidad de uso no válido.');
+  }
+  if (
+    input.piecesPerPurchaseUnit != null &&
+    (!Number.isFinite(input.piecesPerPurchaseUnit) || input.piecesPerPurchaseUnit <= 0)
+  ) {
+    throw new Error('Piezas por unidad de compra debe ser mayor que 0.');
+  }
+  if (input.weightPerPiece != null && (!Number.isFinite(input.weightPerPiece) || input.weightPerPiece <= 0)) {
+    throw new Error('Peso por pieza debe ser mayor que 0.');
+  }
+  return {
+    name,
+    usage_unit: usageUnit,
+    pieces_per_purchase_unit:
+      input.piecesPerPurchaseUnit != null ? Math.round(input.piecesPerPurchaseUnit * 10000) / 10000 : null,
+    weight_per_piece: input.weightPerPiece != null ? Math.round(input.weightPerPiece * 10000) / 10000 : null,
+    weight_unit: weightUnit,
+    cost_per_usage_unit: Math.round(input.costPerUsageUnit * 1000000) / 1000000,
+    is_default: Boolean(input.isDefault),
+  };
+}
+
+export async function fetchArticleUsageFormats(
+  supabase: SupabaseClient,
+  articleIds: string[],
+): Promise<Map<string, ArticleUsageFormat[]>> {
+  const map = new Map<string, ArticleUsageFormat[]>();
+  const uniq = [...new Set(articleIds)].filter(Boolean);
+  if (!uniq.length) return map;
+  try {
+    const { data, error } = await supabase
+      .from('article_usage_formats')
+      .select(
+        'id,article_id,organization_id,name,usage_unit,pieces_per_purchase_unit,weight_per_piece,weight_unit,cost_per_usage_unit,is_default,created_at,updated_at',
+      )
+      .in('article_id', uniq)
+      .order('is_default', { ascending: false })
+      .order('name', { ascending: true });
+    if (error) return map;
+    for (const row of (data ?? []) as Record<string, unknown>[]) {
+      const f = mapArticleUsageFormatRow(row);
+      const list = map.get(f.articleId) ?? [];
+      list.push(f);
+      map.set(f.articleId, list);
+    }
+  } catch {
+    return map;
+  }
+  return map;
+}
+
+export async function createArticleUsageFormat(
+  supabase: SupabaseClient,
+  articleId: string,
+  input: ArticleUsageFormatInput,
+): Promise<ArticleUsageFormat> {
+  const row: Record<string, unknown> = { article_id: articleId, ...articleUsageFormatRow(input) };
+  if (row.is_default) {
+    await supabase.from('article_usage_formats').update({ is_default: false }).eq('article_id', articleId);
+  }
+  const { data, error } = await supabase
+    .from('article_usage_formats')
+    .insert(row)
+    .select(
+      'id,article_id,organization_id,name,usage_unit,pieces_per_purchase_unit,weight_per_piece,weight_unit,cost_per_usage_unit,is_default,created_at,updated_at',
+    )
+    .single();
+  if (error) throw new Error(error.message);
+  return mapArticleUsageFormatRow(data as Record<string, unknown>);
+}
+
+export async function updateArticleUsageFormat(
+  supabase: SupabaseClient,
+  articleId: string,
+  formatId: string,
+  input: ArticleUsageFormatInput,
+): Promise<ArticleUsageFormat> {
+  const row = articleUsageFormatRow(input);
+  if (row.is_default) {
+    await supabase
+      .from('article_usage_formats')
+      .update({ is_default: false })
+      .eq('article_id', articleId)
+      .neq('id', formatId);
+  }
+  const { data, error } = await supabase
+    .from('article_usage_formats')
+    .update(row)
+    .eq('id', formatId)
+    .eq('article_id', articleId)
+    .select(
+      'id,article_id,organization_id,name,usage_unit,pieces_per_purchase_unit,weight_per_piece,weight_unit,cost_per_usage_unit,is_default,created_at,updated_at',
+    )
+    .single();
+  if (error) throw new Error(error.message);
+  return mapArticleUsageFormatRow(data as Record<string, unknown>);
+}
+
+export async function deleteArticleUsageFormat(
+  supabase: SupabaseClient,
+  articleId: string,
+  formatId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('article_usage_formats')
+    .delete()
+    .eq('id', formatId)
+    .eq('article_id', articleId);
+  if (error) throw new Error(error.message);
 }
 
 /**
