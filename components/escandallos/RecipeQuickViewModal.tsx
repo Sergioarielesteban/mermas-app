@@ -119,9 +119,9 @@ function QuickMetric({
   barColor?: string;
 }) {
   return (
-    <div className="rounded-2xl bg-white px-3 py-3 shadow-sm ring-1 ring-zinc-200/80">
-      <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{label}</p>
-      <p className={`mt-1 font-mono text-[1.15rem] font-bold tabular-nums leading-none ${valueClassName}`}>{value}</p>
+    <div className="rounded-2xl bg-white px-2.5 py-2.5 shadow-sm ring-1 ring-zinc-200/80 sm:px-3 sm:py-3">
+      <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-zinc-400 sm:text-[9px] sm:tracking-[0.14em]">{label}</p>
+      <p className={`mt-0.5 font-mono text-base font-bold tabular-nums leading-none sm:mt-1 sm:text-[1.15rem] ${valueClassName}`}>{value}</p>
       {barPct != null && Number.isFinite(barPct) ? (
         <span className="mt-2 block h-1 overflow-hidden rounded-full bg-zinc-100">
           <span
@@ -222,7 +222,7 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
       <div className="flex min-h-full items-end justify-center p-0 sm:items-center sm:p-4">
         <section className="flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-[2rem] bg-[#f5f5f7] shadow-[0_24px_80px_rgba(0,0,0,0.18)] sm:max-h-[88vh] sm:max-w-3xl sm:rounded-[2rem]">
           <header className="relative overflow-hidden bg-gradient-to-b from-white via-white to-[#f5f5f7]">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_at_top,rgba(74,107,58,0.08),transparent_70%)]" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[radial-gradient(ellipse_at_top,rgba(74,107,58,0.08),transparent_70%)] sm:h-24" />
             <button
               type="button"
               onClick={onClose}
@@ -231,20 +231,61 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
             >
               <X className="h-5 w-5" />
             </button>
-            <div className="relative grid gap-4 p-4 sm:grid-cols-[12.5rem_1fr] sm:gap-5 sm:p-5">
-              <div className="mx-auto aspect-square w-48 overflow-hidden rounded-[1.35rem] bg-[#F7F3EE] shadow-[0_8px_28px_rgba(0,0,0,0.08)] ring-1 ring-zinc-200/80 sm:w-52">
+
+            {/* Móvil: foto ancha, plato completo */}
+            <div className="relative px-4 pb-1 pt-3 sm:hidden">
+              <div className="overflow-hidden rounded-[1.35rem] bg-gradient-to-b from-[#F7F3EE] via-white to-[#FAFAF9] px-3 py-4 shadow-[0_8px_28px_rgba(0,0,0,0.06)] ring-1 ring-zinc-200/80">
                 {photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={photoUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  <img
+                    src={photoUrl}
+                    alt=""
+                    loading="lazy"
+                    className="mx-auto block max-h-[min(52vw,240px)] w-full object-contain object-center"
+                  />
+                ) : (
+                  <div className="grid min-h-[180px] w-full place-items-center">
+                    <ChefHat className="h-10 w-10 text-zinc-300" strokeWidth={1.8} />
+                  </div>
+                )}
+              </div>
+              <div className="mt-3 pr-8 text-left">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">{typeLabel}</p>
+                <h2 className="mt-1 font-serif text-[1.4rem] font-normal leading-[1.1] tracking-tight text-zinc-950">
+                  {title}
+                </h2>
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-zinc-600 shadow-sm ring-1 ring-zinc-200/80">
+                    {familyLabel}
+                  </span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-zinc-600 shadow-sm ring-1 ring-zinc-200/80">
+                    {yieldLabel}
+                  </span>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-medium tabular-nums text-zinc-500 shadow-sm ring-1 ring-zinc-200/80">
+                    Act. {formatDate(updatedAt)}
+                  </span>
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-100/90">
+                    {isEsc ? 'Activo' : props.recipe.is_active ? 'Activo' : 'Inactivo'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Escritorio: foto + datos en fila */}
+            <div className="relative hidden gap-5 p-5 sm:grid sm:grid-cols-[12.5rem_1fr]">
+              <div className="mx-auto aspect-square w-52 overflow-hidden rounded-[1.35rem] bg-[#F7F3EE] shadow-[0_8px_28px_rgba(0,0,0,0.08)] ring-1 ring-zinc-200/80">
+                {photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={photoUrl} alt="" loading="lazy" className="h-full w-full object-contain p-1" />
                 ) : (
                   <div className="grid h-full w-full place-items-center bg-gradient-to-br from-[#F7F3EE] to-white text-center">
                     <ChefHat className="h-10 w-10 text-zinc-300" strokeWidth={1.8} />
                   </div>
                 )}
               </div>
-              <div className="min-w-0 pr-10 sm:pr-9">
+              <div className="min-w-0 pr-9">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">{typeLabel}</p>
-                <h2 className="mt-1 font-serif text-[1.35rem] font-normal leading-[1.12] tracking-tight text-zinc-950 sm:text-[1.65rem]">
+                <h2 className="mt-1 font-serif text-[1.65rem] font-normal leading-[1.12] tracking-tight text-zinc-950">
                   {title}
                 </h2>
                 <div className="mt-3 flex flex-wrap gap-1.5">
@@ -460,7 +501,7 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
             ) : null}
           </div>
 
-          <footer className="grid grid-cols-3 gap-2 border-t border-zinc-200/80 bg-white/95 p-3 backdrop-blur-sm">
+          <footer className="grid grid-cols-3 gap-2 border-t border-zinc-200/80 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] backdrop-blur-sm">
             {props.editHref ? (
               <Link
                 href={props.editHref}
