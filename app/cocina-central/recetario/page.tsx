@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, Pencil, Trash2 } from 'lucide-react';
+import { Copy, Eye, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import RecipeQuickViewModal from '@/components/escandallos/RecipeQuickViewModal';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canCocinaCentralOperate } from '@/lib/cocina-central-permissions';
 import {
@@ -35,6 +36,7 @@ export default function RecetarioCentralPage() {
   const [busyDup, setBusyDup] = useState<string | null>(null);
   const [busyToggle, setBusyToggle] = useState<string | null>(null);
   const [busyDelete, setBusyDelete] = useState<string | null>(null);
+  const [quickViewRecipeId, setQuickViewRecipeId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!supabase || !localId || !canUse) return;
@@ -63,7 +65,10 @@ export default function RecetarioCentralPage() {
   }, [supabase, localId, canUse]);
 
   useEffect(() => {
-    void load();
+    const t = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(t);
   }, [load]);
 
   const duplicate = async (id: string) => {
@@ -115,6 +120,7 @@ export default function RecetarioCentralPage() {
   };
 
   const sorted = useMemo(() => [...rows].sort((a, b) => a.name.localeCompare(b.name, 'es')), [rows]);
+  const quickViewRecipe = quickViewRecipeId ? rows.find((row) => row.id === quickViewRecipeId) ?? null : null;
 
   if (!profileReady) return <p className="text-sm text-zinc-500">Cargando…</p>;
   if (!isSupabaseEnabled() || !supabase) {
@@ -183,6 +189,14 @@ export default function RecetarioCentralPage() {
             return (
               <div
                 key={r.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setQuickViewRecipeId(r.id)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                  event.preventDefault();
+                  setQuickViewRecipeId(r.id);
+                }}
                 className={`flex flex-col rounded-2xl border bg-white p-4 shadow-sm ${
                   r.is_active ? 'border-zinc-200' : 'border-zinc-300 opacity-80'
                 }`}
@@ -228,8 +242,20 @@ export default function RecetarioCentralPage() {
                   ) : null}
                 </dl>
                 <div className="mt-4 flex flex-wrap gap-2 border-t border-zinc-100 pt-3">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setQuickViewRecipeId(r.id);
+                    }}
+                    className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs font-bold text-zinc-900 min-[360px]:flex-none"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    Ver
+                  </button>
                   <Link
                     href={`/cocina-central/produccion/recetas/${r.id}`}
+                    onClick={(event) => event.stopPropagation()}
                     className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs font-bold text-zinc-900 min-[360px]:flex-none"
                   >
                     <Pencil className="h-3.5 w-3.5" />
@@ -238,7 +264,10 @@ export default function RecetarioCentralPage() {
                   <button
                     type="button"
                     disabled={busyDup === r.id}
-                    onClick={() => void duplicate(r.id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void duplicate(r.id);
+                    }}
                     className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs font-bold text-zinc-800 min-[360px]:flex-none disabled:opacity-50"
                   >
                     <Copy className="h-3.5 w-3.5" />
@@ -247,7 +276,10 @@ export default function RecetarioCentralPage() {
                   <button
                     type="button"
                     disabled={busyToggle === r.id}
-                    onClick={() => void toggleActive(r)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void toggleActive(r);
+                    }}
                     className="inline-flex flex-1 items-center justify-center rounded-xl border border-zinc-300 px-3 py-2 text-xs font-bold text-zinc-800 min-[360px]:flex-none disabled:opacity-50"
                   >
                     {busyToggle === r.id ? '…' : r.is_active ? 'Desactivar' : 'Activar'}
@@ -255,7 +287,10 @@ export default function RecetarioCentralPage() {
                   <button
                     type="button"
                     disabled={busyDelete === r.id}
-                    onClick={() => void removeRecipe(r)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void removeRecipe(r);
+                    }}
                     className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-[#B91C1C] min-[360px]:flex-none disabled:opacity-50"
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden />
@@ -267,6 +302,19 @@ export default function RecetarioCentralPage() {
           })
         )}
       </div>
+
+      {quickViewRecipe ? (
+        <RecipeQuickViewModal
+          open
+          mode="central_kitchen"
+          readonly
+          localId={localId}
+          supabase={supabase}
+          onClose={() => setQuickViewRecipeId(null)}
+          editHref={`/cocina-central/produccion/recetas/${quickViewRecipe.id}`}
+          recipe={quickViewRecipe}
+        />
+      ) : null}
     </div>
   );
 }

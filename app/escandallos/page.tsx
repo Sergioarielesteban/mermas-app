@@ -10,6 +10,7 @@ import {
   BarChart3,
   Calculator,
   ChevronRight,
+  Eye,
   MoreHorizontal,
   PencilLine,
   Plus,
@@ -24,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import EscandalloQuickCalculatorModal from '@/components/escandallos/EscandalloQuickCalculatorModal';
+import RecipeQuickViewModal from '@/components/escandallos/RecipeQuickViewModal';
 import { isDemoMode } from '@/lib/demo-mode';
 import { getDemoEscandalloPack } from '@/lib/demo-dataset';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -366,6 +368,7 @@ function RecipeCard({
   photoUrl,
   actionHref,
   updatedLabel,
+  onView,
   onRefresh,
   onPrint,
   printing = false,
@@ -374,6 +377,7 @@ function RecipeCard({
   photoUrl?: string | null;
   actionHref?: string;
   updatedLabel?: string;
+  onView?: () => void;
   onRefresh?: () => void;
   onPrint?: () => void;
   printing?: boolean;
@@ -383,7 +387,18 @@ function RecipeCard({
   const kindLabel = r.isSubRecipe ? 'BASE' : 'PLATO';
 
   return (
-    <article className="group rounded-xl border border-[rgba(10,9,8,0.06)] bg-white px-2.5 py-2 shadow-[0_1px_0_rgba(10,9,8,0.04)] transition-[box-shadow,transform] active:scale-[0.995] hover:shadow-[0_2px_10px_rgba(10,9,8,0.05)]">
+    <article
+      role={onView ? 'button' : undefined}
+      tabIndex={onView ? 0 : undefined}
+      onClick={onView}
+      onKeyDown={(event) => {
+        if (!onView) return;
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        onView();
+      }}
+      className="group rounded-xl border border-[rgba(10,9,8,0.06)] bg-white px-2.5 py-2 shadow-[0_1px_0_rgba(10,9,8,0.04)] transition-[box-shadow,transform] active:scale-[0.995] hover:shadow-[0_2px_10px_rgba(10,9,8,0.05)]"
+    >
       <div className="flex items-start gap-2">
         <div className="h-14 w-14 shrink-0 overflow-hidden rounded-[16px] bg-[#FAFAF9] ring-1 ring-[rgba(10,9,8,0.06)]">
           {photoUrl ? (
@@ -410,6 +425,7 @@ function RecipeCard({
           ) : null}
           <Link
             href={editHref}
+            onClick={(event) => event.stopPropagation()}
             className="grid h-7 w-7 place-items-center rounded-lg text-[#7E7468] transition hover:bg-[#F7F3EE] active:bg-[#F7F3EE]"
             aria-label="Opciones de receta"
           >
@@ -429,9 +445,21 @@ function RecipeCard({
         <RecipeMetric label="Margen" value={formatMargin(r.foodCostPct)} valueClassName={marginValueClass(r.foodCostPct)} />
       </div>
 
-      <div className="mt-2 grid grid-cols-3 gap-1.5">
+      <div className="mt-2 grid grid-cols-2 gap-1.5">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onView?.();
+          }}
+          className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-1.5 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F7F3EE] active:bg-[#F7F3EE]"
+        >
+          <Eye className="h-3 w-3 shrink-0" />
+          <span className="truncate">Ver</span>
+        </button>
         <Link
           href={editHref}
+          onClick={(event) => event.stopPropagation()}
           className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-1.5 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F7F3EE] active:bg-[#F7F3EE]"
         >
           <PencilLine className="h-3 w-3 shrink-0" />
@@ -439,7 +467,10 @@ function RecipeCard({
         </Link>
         <button
           type="button"
-          onClick={onPrint}
+          onClick={(event) => {
+            event.stopPropagation();
+            onPrint?.();
+          }}
           disabled={printing}
           className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-1.5 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F7F3EE] active:bg-[#F7F3EE] disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -448,7 +479,10 @@ function RecipeCard({
         </button>
         <button
           type="button"
-          onClick={() => (onRefresh ? onRefresh() : window.location.reload())}
+          onClick={(event) => {
+            event.stopPropagation();
+            return onRefresh ? onRefresh() : window.location.reload();
+          }}
           className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-[#D32F2F] px-1.5 text-[10px] font-semibold text-white transition hover:bg-[#B91C1C] active:scale-[0.98]"
         >
           <RefreshCw className="h-3 w-3 shrink-0" />
@@ -480,6 +514,7 @@ export default function EscandallosPage() {
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [printingRecipeId, setPrintingRecipeId] = useState<string | null>(null);
+  const [quickViewRecipeId, setQuickViewRecipeId] = useState<string | null>(null);
   const [quickCalcOpen, setQuickCalcOpen] = useState(false);
   const [baseBusyId, setBaseBusyId] = useState<string | null>(null);
   const [deleteConfirmBase, setDeleteConfirmBase] = useState<{
@@ -664,6 +699,8 @@ export default function EscandallosPage() {
   }, [mainRows, subRows]);
 
   const recipeUpdatedById = useMemo(() => new Map(recipes.map((r) => [r.id, r.updatedAt])), [recipes]);
+  const quickViewRecipe = quickViewRecipeId ? recipesById.get(quickViewRecipeId) ?? null : null;
+  const quickViewRow = quickViewRecipeId ? rows.find((row) => row.id === quickViewRecipeId) ?? null : null;
 
   const filteredRecipeRows = useMemo(() => {
     const q = recipeSearch.trim().toLowerCase();
@@ -996,6 +1033,7 @@ export default function EscandallosPage() {
                       photoUrl={getOfficialRecipePhotoUrl(technicalSheetsByRecipe.get(r.id))}
                       actionHref={`/escandallos/recetas/${r.id}/editar`}
                       updatedLabel={formatRecipeUpdatedLabel(recipeUpdatedById.get(r.id))}
+                      onView={() => setQuickViewRecipeId(r.id)}
                       onRefresh={() => void load()}
                       onPrint={() => void handlePrintRecipe(r.id)}
                       printing={printingRecipeId === r.id}
@@ -1050,6 +1088,14 @@ export default function EscandallosPage() {
                   return (
                     <article
                       key={r.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setQuickViewRecipeId(r.id)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                        event.preventDefault();
+                        setQuickViewRecipeId(r.id);
+                      }}
                       className="rounded-2xl border border-zinc-200/70 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100/80 transition duration-200 hover:shadow-[0_6px_24px_rgba(0,0,0,0.06)] active:scale-[0.995]"
                     >
                       <div className="min-w-0">
@@ -1085,18 +1131,21 @@ export default function EscandallosPage() {
                         </div>
                       </div>
 
-                      <div className="mt-2.5 grid grid-cols-3 gap-2">
+                      <div className="mt-2.5 grid grid-cols-2 gap-2">
                         <button
                           type="button"
-                          onClick={() => void handlePrintRecipe(r.id)}
-                          disabled={printingRecipeId === r.id}
-                          className="inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-2 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setQuickViewRecipeId(r.id);
+                          }}
+                          className="inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-2 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50"
                         >
-                          <Printer className="h-3.5 w-3.5 shrink-0" />
-                          <span>{printingRecipeId === r.id ? 'Imprimiendo…' : 'Imprimir'}</span>
+                          <Eye className="h-3.5 w-3.5 shrink-0" />
+                          <span>Ver</span>
                         </button>
                         <Link
                           href={`/escandallos/recetas/${r.id}/editar`}
+                          onClick={(event) => event.stopPropagation()}
                           className="inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-2 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50"
                         >
                           <PencilLine className="h-3.5 w-3.5 shrink-0" />
@@ -1104,8 +1153,23 @@ export default function EscandallosPage() {
                         </Link>
                         <button
                           type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handlePrintRecipe(r.id);
+                          }}
+                          disabled={printingRecipeId === r.id}
+                          className="inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-2 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+                        >
+                          <Printer className="h-3.5 w-3.5 shrink-0" />
+                          <span>{printingRecipeId === r.id ? 'Imprimiendo…' : 'Imprimir'}</span>
+                        </button>
+                        <button
+                          type="button"
                           disabled={baseBusyId === r.id}
-                          onClick={() => void handleDeleteBase(r)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleDeleteBase(r);
+                          }}
                           className="inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-2xl border border-red-200 bg-red-50 px-2 text-[10px] font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
                         >
                           <Trash2 className="h-3.5 w-3.5 shrink-0" />
@@ -1328,6 +1392,31 @@ export default function EscandallosPage() {
           </EscModuleCard>
         </>
       )}
+
+      {quickViewRecipe && quickViewRow ? (
+        <RecipeQuickViewModal
+          open
+          mode="escandallo"
+          readonly
+          localId={localId}
+          supabase={isDemoMode() ? null : getSupabaseClient()}
+          onClose={() => setQuickViewRecipeId(null)}
+          onPrint={() => void handlePrintRecipe(quickViewRecipe.id)}
+          editHref={`/escandallos/recetas/${quickViewRecipe.id}/editar`}
+          recipe={quickViewRecipe}
+          lines={linesByRecipe[quickViewRecipe.id] ?? []}
+          rawById={rawById}
+          processedById={processedById}
+          recipesById={recipesById}
+          linesByRecipe={linesByRecipe}
+          technicalSheetsByRecipe={technicalSheetsByRecipe}
+          centralKitchenById={centralKitchenById}
+          costPerYieldEur={quickViewRow.costPerYieldEur}
+          saleGrossEur={quickViewRow.saleGrossEur}
+          foodCostPct={quickViewRow.foodCostPct}
+          marginPct={quickViewRow.foodCostPct != null ? 100 - quickViewRow.foodCostPct : null}
+        />
+      ) : null}
 
       {deleteConfirmBase ? (
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-[rgba(10,9,8,0.45)] px-4 py-6 sm:items-center">

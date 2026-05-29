@@ -14,6 +14,7 @@ import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import {
   fetchPurchaseArticles,
   fetchArticleUsageFormats,
+  enrichSupplierCatalogMapWithArticleHints,
   fetchSupplierCatalogRowsForArticleIds,
   isMissingPurchaseArticlesError,
   createArticleUsageFormat,
@@ -43,6 +44,11 @@ import {
 } from '@/lib/escandallo-articulos-nav';
 import { fetchEscandalloRawProductsWithWeightedPurchasePrices } from '@/lib/escandallos-supabase';
 import { useOperationalAutoCollapse } from '@/lib/use-operational-auto-collapse';
+import SupplierProductSearchInput from '@/components/inventory/SupplierProductSearchInput';
+import {
+  fetchInventorySupplierProductsForSearch,
+  type InventorySupplierProductSearchRow,
+} from '@/lib/inventory-supplier-pricing';
 
 function formatShortDate(iso: string) {
   try {
@@ -50,6 +56,25 @@ function formatShortDate(iso: string) {
   } catch {
     return iso;
   }
+}
+
+function supplierSearchRowToCatalogRow(
+  row: InventorySupplierProductSearchRow,
+  articleId: string,
+): SupplierCatalogRow {
+  return {
+    id: row.id,
+    supplierId: row.supplierId,
+    supplierName: row.supplierName,
+    articleId,
+    name: row.name,
+    unit: row.unit,
+    pricePerUnit: row.pricePerUnit,
+    billingUnit: row.billingUnit,
+    billingQtyPerOrderUnit: row.billingQtyPerOrderUnit,
+    pricePerBillingUnit: row.pricePerBillingUnit,
+    isActive: true,
+  };
 }
 
 function formatFileSize(bytes: number | null | undefined): string {
@@ -86,6 +111,9 @@ export default function PedidosArticulosPage() {
   const [estadoFilter, setEstadoFilter] = useState<'activos' | 'inactivos' | 'todos'>('activos');
   const [hasArticulosReturn, setHasArticulosReturn] = useState(false);
   const [expandedArticleId, setExpandedArticleId] = useState<string | null>(null);
+  const [supplierProductsForSearch, setSupplierProductsForSearch] = useState<InventorySupplierProductSearchRow[]>(
+    [],
+  );
   const articleListRef = React.useRef<HTMLUListElement | null>(null);
   const dirtyArticleIdsRef = React.useRef(new Set<string>());
 
@@ -104,8 +132,11 @@ export default function PedidosArticulosPage() {
       const supabase = getSupabaseClient()!;
       const list = await fetchPurchaseArticles(supabase, localId);
       const articleIds = list.map((a) => a.id);
-      const catalogMap = await fetchSupplierCatalogRowsForArticleIds(supabase, localId, articleIds).catch(
+      let catalogMap = await fetchSupplierCatalogRowsForArticleIds(supabase, localId, articleIds).catch(
         () => new Map(),
+      );
+      catalogMap = await enrichSupplierCatalogMapWithArticleHints(supabase, localId, list, catalogMap).catch(
+        () => catalogMap,
       );
       const usageFormatsMap = await fetchArticleUsageFormats(supabase, articleIds).catch(() => new Map());
 
@@ -123,11 +154,14 @@ export default function PedidosArticulosPage() {
         ]),
       );
 
+      const supplierSearchRows = await fetchInventorySupplierProductsForSearch(supabase, localId).catch(() => []);
+
       setArticles(list);
       setCatalogByArticle(catalogMap);
       setUsageFormatsByArticle(usageFormatsMap);
       setPriceSamples(samples);
       setEscandalloPricingBySupplierProduct(escPricingMap);
+      setSupplierProductsForSearch(supplierSearchRows);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'No se pudieron cargar artículos.';
       if (isMissingPurchaseArticlesError(msg)) {
@@ -140,6 +174,7 @@ export default function PedidosArticulosPage() {
       setUsageFormatsByArticle(new Map());
       setPriceSamples(new Map());
       setEscandalloPricingBySupplierProduct(new Map());
+      setSupplierProductsForSearch([]);
     } finally {
       setLoading(false);
     }
@@ -349,6 +384,7 @@ export default function PedidosArticulosPage() {
               usageFormats={usageFormatsByArticle.get(a.id) ?? []}
               priceSamples={priceSamples}
               escandalloPricingBySupplierProduct={escandalloPricingBySupplierProduct}
+              supplierProductsForSearch={supplierProductsForSearch}
               onReload={() => void load()}
               expanded={expandedArticleId === a.id}
               onExpandedChange={(open) => setExpandedArticleId(open ? a.id : null)}
@@ -370,6 +406,7 @@ function ArticleCard({
   usageFormats,
   priceSamples,
   escandalloPricingBySupplierProduct,
+  supplierProductsForSearch,
   onReload,
   expanded,
   onExpandedChange,
@@ -380,6 +417,7 @@ function ArticleCard({
   usageFormats: ArticleUsageFormat[];
   priceSamples: Map<string, SupplierProductPriceSample[]>;
   escandalloPricingBySupplierProduct: Map<string, { pricePerUnit: number; unit: string; source: string | null }>;
+  supplierProductsForSearch: InventorySupplierProductSearchRow[];
   onReload: () => void;
   expanded: boolean;
   onExpandedChange: (open: boolean) => void;
@@ -408,6 +446,7 @@ function ArticleCard({
   const [refProdId, setRefProdId] = useState(
     () => a.referenciaPrincipalSupplierProductId ?? a.createdFromSupplierProductId ?? '',
   );
+  const [pickedCatalogRow, setPickedCatalogRow] = useState<SupplierCatalogRow | null>(null);
   const [unidadUso, setUnidadUso] = useState(() => {
     const u = (a.unidadUso ?? a.unidadBase ?? 'kg').trim();
     return u || 'kg';
@@ -421,6 +460,7 @@ function ArticleCard({
 
   useEffect(() => {
     setRefProdId(a.referenciaPrincipalSupplierProductId ?? a.createdFromSupplierProductId ?? '');
+    setPickedCatalogRow(null);
     setUnidadUso((() => {
       const u = (a.unidadUso ?? a.unidadBase ?? 'kg').trim();
       return u || 'kg';
@@ -588,8 +628,27 @@ function ArticleCard({
 
   const originId = a.createdFromSupplierProductId;
   const preferredId = a.proveedorPreferidoId;
-  const activeRows = catalogRows.filter((r) => r.isActive);
-  const compareRows = activeRows.length > 0 ? activeRows : catalogRows;
+  const mergedCatalogRows = useMemo(() => {
+    const byId = new Map<string, SupplierCatalogRow>();
+    for (const row of catalogRows) byId.set(row.id, row);
+    if (pickedCatalogRow) byId.set(pickedCatalogRow.id, pickedCatalogRow);
+    return [...byId.values()];
+  }, [catalogRows, pickedCatalogRow]);
+  const activeRows = mergedCatalogRows.filter((r) => r.isActive);
+  const compareRows = activeRows.length > 0 ? activeRows : mergedCatalogRows;
+
+  useEffect(() => {
+    if (compareRows.length === 0) return;
+    const saved =
+      a.referenciaPrincipalSupplierProductId ?? a.createdFromSupplierProductId ?? '';
+    if (saved && compareRows.some((r) => r.id === saved)) {
+      if (refProdId !== saved) setRefProdId(saved);
+      return;
+    }
+    if (!refProdId && compareRows.length === 1) {
+      setRefProdId(compareRows[0].id);
+    }
+  }, [a.id, a.referenciaPrincipalSupplierProductId, a.createdFromSupplierProductId, compareRows, refProdId]);
   const minCatalog =
     compareRows.length > 0 ? Math.min(...compareRows.map((r) => r.pricePerUnit)) : null;
   const maxCatalog =
@@ -1018,22 +1077,63 @@ function ArticleCard({
                     <dd className="mt-0.5 font-black text-zinc-950">{a.ivaCompraPct != null ? `${a.ivaCompraPct} %` : '—'}</dd>
                   </div>
                 </dl>
-                <label className="mt-2 block">
-                  <span className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-400">Referencia</span>
-                  <select
-                    value={refProdId}
-                    disabled={masterBusy || compareRows.length === 0}
-                    onChange={(e) => setRefProdId(e.target.value)}
-                    className="mt-1 h-9 w-full rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-4 focus:ring-[#D32F2F]/10"
-                  >
-                    <option value="">—</option>
-                    {compareRows.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.supplierName} · {r.name} ({formatUnitPriceEur(r.pricePerBillingUnit ?? r.pricePerUnit, r.billingUnit ?? r.unit)})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="mt-2 block">
+                  <span className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-400">Referencia de compra</span>
+                  <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">
+                    Producto del catálogo de proveedor que usas para comprar este artículo (precio, IVA y unidad).
+                  </p>
+                  {compareRows.length === 0 ? (
+                    <div className="mt-1.5 space-y-2">
+                      <p className="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-snug text-amber-950">
+                        Este artículo master aún no está enlazado al catálogo. Busca el producto del proveedor (por ejemplo{' '}
+                        <strong className="font-semibold">picatoste</strong> o el nombre del proveedor).
+                      </p>
+                      <SupplierProductSearchInput
+                        products={supplierProductsForSearch}
+                        value={refProdId}
+                        disabled={masterBusy}
+                        onSelect={(p) => {
+                          setPickedCatalogRow(supplierSearchRowToCatalogRow(p, a.id));
+                          setRefProdId(p.id);
+                          setMasterMsg(null);
+                        }}
+                        onClear={() => {
+                          setPickedCatalogRow(null);
+                          setRefProdId('');
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        value={refProdId}
+                        disabled={masterBusy}
+                        onChange={(e) => setRefProdId(e.target.value)}
+                        className="mt-1.5 h-9 w-full rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-900 outline-none focus:ring-4 focus:ring-[#D32F2F]/10"
+                      >
+                        <option value="">— Elige fila de catálogo —</option>
+                        {compareRows.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.supplierName} · {r.name} ({formatUnitPriceEur(r.pricePerBillingUnit ?? r.pricePerUnit, r.billingUnit ?? r.unit)})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1.5 text-[10px] text-zinc-500">¿No aparece? Busca otro producto:</p>
+                      <SupplierProductSearchInput
+                        products={supplierProductsForSearch}
+                        value=""
+                        disabled={masterBusy}
+                        onSelect={(p) => {
+                          setPickedCatalogRow(supplierSearchRowToCatalogRow(p, a.id));
+                          setRefProdId(p.id);
+                          setMasterMsg(null);
+                        }}
+                        onClear={() => {}}
+                        className="mt-0"
+                      />
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="rounded-2xl bg-white p-0 ring-0">

@@ -266,6 +266,56 @@ export async function deleteArticleUsageFormat(
   if (error) throw new Error(error.message);
 }
 
+const SUPPLIER_CATALOG_SELECT =
+  'id,supplier_id,article_id,name,unit,price_per_unit,billing_unit,billing_qty_per_order_unit,price_per_billing_unit,is_active,pedido_suppliers(name)';
+
+function mapPedidoSupplierProductToCatalogRow(
+  row: Record<string, unknown>,
+  articleIdOverride?: string,
+): SupplierCatalogRow | null {
+  const articleId =
+    articleIdOverride ?? (row.article_id != null ? String(row.article_id) : null);
+  if (!articleId) return null;
+  const sup = row.pedido_suppliers;
+  let supplierName = '';
+  if (Array.isArray(sup)) {
+    supplierName = String((sup[0] as { name?: string } | undefined)?.name ?? '');
+  } else if (sup && typeof sup === 'object' && 'name' in sup) {
+    supplierName = String((sup as { name: string }).name ?? '');
+  }
+  return {
+    id: String(row.id),
+    supplierId: String(row.supplier_id),
+    supplierName,
+    articleId,
+    name: String(row.name ?? ''),
+    unit: String(row.unit ?? ''),
+    pricePerUnit: Number(row.price_per_unit ?? 0),
+    billingUnit: row.billing_unit != null ? String(row.billing_unit) : null,
+    billingQtyPerOrderUnit:
+      row.billing_qty_per_order_unit != null && Number.isFinite(Number(row.billing_qty_per_order_unit))
+        ? Number(row.billing_qty_per_order_unit)
+        : null,
+    pricePerBillingUnit:
+      row.price_per_billing_unit != null && Number.isFinite(Number(row.price_per_billing_unit))
+        ? Number(row.price_per_billing_unit)
+        : null,
+    isActive: Boolean(row.is_active),
+  };
+}
+
+function sortSupplierCatalogRows(list: SupplierCatalogRow[]): void {
+  list.sort((a, b) => a.pricePerUnit - b.pricePerUnit || a.supplierName.localeCompare(b.supplierName));
+}
+
+function mergeCatalogRow(map: Map<string, SupplierCatalogRow[]>, articleId: string, row: SupplierCatalogRow): void {
+  const list = map.get(articleId) ?? [];
+  if (list.some((r) => r.id === row.id)) return;
+  list.push(row);
+  sortSupplierCatalogRows(list);
+  map.set(articleId, list);
+}
+
 /**
  * Todos los productos de proveedor que comparten `article_id` (comparativa precios / proveedores).
  * Ordenados por precio ascendente.
@@ -279,47 +329,101 @@ export async function fetchSupplierCatalogRowsForArticleIds(
   if (!articleIds.length) return map;
   const { data, error } = await supabase
     .from('pedido_supplier_products')
-    .select('id,supplier_id,article_id,name,unit,price_per_unit,billing_unit,billing_qty_per_order_unit,price_per_billing_unit,is_active,pedido_suppliers(name)')
+    .select(SUPPLIER_CATALOG_SELECT)
     .eq('local_id', localId)
     .in('article_id', articleIds);
   if (error) throw new Error(error.message);
 
   for (const row of (data ?? []) as Record<string, unknown>[]) {
-    const aid = row.article_id != null ? String(row.article_id) : null;
-    if (!aid) continue;
-    const sup = row.pedido_suppliers;
-    let supplierName = '';
-    if (Array.isArray(sup)) {
-      supplierName = String((sup[0] as { name?: string } | undefined)?.name ?? '');
-    } else if (sup && typeof sup === 'object' && 'name' in sup) {
-      supplierName = String((sup as { name: string }).name ?? '');
+    const mapped = mapPedidoSupplierProductToCatalogRow(row);
+    if (!mapped?.articleId) continue;
+    mergeCatalogRow(map, mapped.articleId, mapped);
+  }
+  return map;
+}
+
+/**
+ * Artículos sin filas por `article_id` suelen ser migraciones incompletas: recupera la fila de
+ * `created_from_supplier_product_id` / `referencia_principal_supplier_product_id`.
+ */
+function pickCatalogNameSearchToken(nombre: string): string | null {
+  const stop = new Set(['con', 'sin', 'para', 'de', 'del', 'la', 'el', 'los', 'las', 'y', 'c', 'c/12', 'c/6']);
+  for (const part of nombre.split(/[\s,/·\-]+/)) {
+    const token = part.trim();
+    if (token.length >= 4 && !stop.has(token.toLowerCase())) return token;
+  }
+  return null;
+}
+
+export async function enrichSupplierCatalogMapWithArticleHints(
+  supabase: SupabaseClient,
+  localId: string,
+  articles: Pick<
+    PurchaseArticle,
+    'id' | 'nombre' | 'createdFromSupplierProductId' | 'referenciaPrincipalSupplierProductId'
+  >[],
+  map: Map<string, SupplierCatalogRow[]>,
+): Promise<Map<string, SupplierCatalogRow[]>> {
+  let missing = articles.filter((a) => !(map.get(a.id)?.length ?? 0));
+  if (!missing.length) return map;
+
+  const productIdToArticleId = new Map<string, string>();
+  for (const article of missing) {
+    for (const productId of [
+      article.referenciaPrincipalSupplierProductId,
+      article.createdFromSupplierProductId,
+    ]) {
+      if (productId) productIdToArticleId.set(productId, article.id);
     }
-    const r: SupplierCatalogRow = {
-      id: String(row.id),
-      supplierId: String(row.supplier_id),
-      supplierName,
-      articleId: aid,
-      name: String(row.name ?? ''),
-      unit: String(row.unit ?? ''),
-      pricePerUnit: Number(row.price_per_unit ?? 0),
-      billingUnit: row.billing_unit != null ? String(row.billing_unit) : null,
-      billingQtyPerOrderUnit:
-        row.billing_qty_per_order_unit != null && Number.isFinite(Number(row.billing_qty_per_order_unit))
-          ? Number(row.billing_qty_per_order_unit)
-          : null,
-      pricePerBillingUnit:
-        row.price_per_billing_unit != null && Number.isFinite(Number(row.price_per_billing_unit))
-          ? Number(row.price_per_billing_unit)
-          : null,
-      isActive: Boolean(row.is_active),
-    };
-    const list = map.get(aid) ?? [];
-    list.push(r);
-    map.set(aid, list);
   }
-  for (const list of map.values()) {
-    list.sort((a, b) => a.pricePerUnit - b.pricePerUnit || a.supplierName.localeCompare(b.supplierName));
+  const productIds = [...productIdToArticleId.keys()];
+  if (productIds.length) {
+    const { data, error } = await supabase
+      .from('pedido_supplier_products')
+      .select(SUPPLIER_CATALOG_SELECT)
+      .eq('local_id', localId)
+      .in('id', productIds);
+    if (error) throw new Error(error.message);
+
+    for (const row of (data ?? []) as Record<string, unknown>[]) {
+      const productId = String(row.id);
+      const articleId = productIdToArticleId.get(productId);
+      if (!articleId) continue;
+      const mapped = mapPedidoSupplierProductToCatalogRow(row, articleId);
+      if (!mapped) continue;
+      mergeCatalogRow(map, articleId, mapped);
+    }
   }
+
+  missing = articles.filter((a) => !(map.get(a.id)?.length ?? 0));
+  if (!missing.length) return map;
+
+  const tokenToArticleIds = new Map<string, string[]>();
+  for (const article of missing) {
+    const token = pickCatalogNameSearchToken(article.nombre);
+    if (!token) continue;
+    const ids = tokenToArticleIds.get(token) ?? [];
+    ids.push(article.id);
+    tokenToArticleIds.set(token, ids);
+  }
+
+  for (const [token, articleIds] of tokenToArticleIds) {
+    const { data, error } = await supabase
+      .from('pedido_supplier_products')
+      .select(SUPPLIER_CATALOG_SELECT)
+      .eq('local_id', localId)
+      .ilike('name', `%${token}%`)
+      .limit(12);
+    if (error) throw new Error(error.message);
+    for (const row of (data ?? []) as Record<string, unknown>[]) {
+      for (const articleId of articleIds) {
+        const mapped = mapPedidoSupplierProductToCatalogRow(row, articleId);
+        if (!mapped) continue;
+        mergeCatalogRow(map, articleId, mapped);
+      }
+    }
+  }
+
   return map;
 }
 
@@ -611,8 +715,22 @@ export async function updatePurchaseArticleMasterCostFields(
 
   const row: Record<string, unknown> = {};
   if (patch.referenciaPrincipalSupplierProductId !== undefined) {
-    row.referencia_principal_supplier_product_id =
+    const principalId =
       patch.referenciaPrincipalSupplierProductId === '' ? null : patch.referenciaPrincipalSupplierProductId;
+    row.referencia_principal_supplier_product_id = principalId;
+    if (principalId) {
+      const nowIso = new Date().toISOString();
+      const link = await supabase
+        .from('pedido_supplier_products')
+        .update({
+          article_id: articleId,
+          migrated_to_article: true,
+          migrated_at: nowIso,
+        })
+        .eq('id', principalId)
+        .eq('local_id', localId);
+      if (link.error) throw new Error(link.error.message);
+    }
   }
   if (patch.unidadCompra !== undefined) row.unidad_compra = patch.unidadCompra;
   if (patch.costeCompraActual !== undefined && patch.costeCompraActual != null && Number.isFinite(patch.costeCompraActual)) {
