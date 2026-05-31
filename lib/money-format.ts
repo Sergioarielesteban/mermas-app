@@ -50,6 +50,13 @@ export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/** Precisión interna para costes antes de formatear/mostrar. */
+export function roundCostPrecision(value: number, fractionDigits = 6): number {
+  if (!Number.isFinite(value)) return 0;
+  const factor = 10 ** fractionDigits;
+  return Math.round(value * factor) / factor;
+}
+
 /** "23,89 €" */
 export function formatMoneyEur(value: number): string {
   if (!Number.isFinite(value)) return '—';
@@ -65,9 +72,10 @@ export function formatMoneyEur(value: number): string {
 export function formatUnitPriceEur(value: number, unit: string): string {
   if (!Number.isFinite(value)) return '—';
   const u = String(unit || '').trim() || 'ud';
+  const showFinePrecision = Math.abs(value) > 0 && Math.abs(value) < 0.01;
   const num = new Intl.NumberFormat('es-ES', {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: showFinePrecision ? 6 : 2,
   }).format(value);
   return `${num} €/${u}`;
 }

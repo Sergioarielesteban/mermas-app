@@ -15,7 +15,7 @@ import {
   unitCompatible,
 } from '@/lib/escandallo-operational-usage';
 import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet-supabase';
-import { formatUnitPriceEur, roundMoney } from '@/lib/money-format';
+import { formatUnitPriceEur, roundCostPrecision, roundMoney } from '@/lib/money-format';
 import { resolveOperationalPrice, type OperationalPriceSource } from '@/lib/operational-price';
 import {
   fetchArticleUsageFormats,
@@ -164,13 +164,13 @@ function convertComparablePriceToUnit(
   const from = normalizeUnitKey(comparableUnit);
   const to = normalizeUnitKey(targetUnit);
   if (!from || !to) return null;
-  if (from === to) return Math.round(pricePerComparableUnit * 10000) / 10000;
+  if (from === to) return roundCostPrecision(pricePerComparableUnit);
   if (!unitCompatible(from, to)) return null;
   const comparableQtyForOneTarget = convertQuantity(1, to, from);
   if (comparableQtyForOneTarget == null || !Number.isFinite(comparableQtyForOneTarget) || comparableQtyForOneTarget <= 0) {
     return null;
   }
-  return Math.round(pricePerComparableUnit * comparableQtyForOneTarget * 10000) / 10000;
+  return roundCostPrecision(pricePerComparableUnit * comparableQtyForOneTarget);
 }
 
 type RecipeRow = {
@@ -546,16 +546,16 @@ export function rawSupplierLineUnitPriceEur(line: EscandalloLine, p: EscandalloR
   // 1) Prioridad real de escandallo: PMP / último válido / catálogo en la unidad de precio del proveedor.
   if (p.pricePerUnit != null && Number.isFinite(p.pricePerUnit) && p.pricePerUnit > 0) {
     const directToLine = convFactor(pricingUnit, lineUnit);
-    if (directToLine != null) return roundMoney(p.pricePerUnit * directToLine);
+    if (directToLine != null) return roundCostPrecision(p.pricePerUnit * directToLine);
     if (pricingQtyPerPurchaseUnit != null && unitsMatchForIngredientCost(lineUnit, purchaseUnit)) {
-      return roundMoney(p.pricePerUnit * pricingQtyPerPurchaseUnit);
+      return roundCostPrecision(p.pricePerUnit * pricingQtyPerPurchaseUnit);
     }
     const toUsage = convFactor(pricingUnit, usageUnit);
     if (toUsage != null) {
       const usageUnitPrice = p.pricePerUnit * toUsage;
       const usageToLine = convFactor(usageUnit, lineUnit);
-      if (usageToLine != null) return roundMoney(usageUnitPrice * usageToLine);
-      if (unitsMatchForIngredientCost(usageUnit, lineUnit)) return roundMoney(usageUnitPrice);
+      if (usageToLine != null) return roundCostPrecision(usageUnitPrice * usageToLine);
+      if (unitsMatchForIngredientCost(usageUnit, lineUnit)) return roundCostPrecision(usageUnitPrice);
     }
   }
 
@@ -566,8 +566,8 @@ export function rawSupplierLineUnitPriceEur(line: EscandalloLine, p: EscandalloR
       : null;
   if (usageUnitPrice == null) return 0;
   const toLine = convFactor(usageUnit, lineUnit);
-  if (toLine != null) return roundMoney(usageUnitPrice * toLine);
-  if (unitsMatchForIngredientCost(usageUnit, lineUnit)) return roundMoney(usageUnitPrice);
+  if (toLine != null) return roundCostPrecision(usageUnitPrice * toLine);
+  if (unitsMatchForIngredientCost(usageUnit, lineUnit)) return roundCostPrecision(usageUnitPrice);
   return 0;
 }
 
@@ -831,13 +831,13 @@ export async function insertEscandalloLine(
         payload.sourceType === 'raw' &&
         payload.unitCostSnapshotEur != null &&
         Number.isFinite(payload.unitCostSnapshotEur)
-          ? Math.round(payload.unitCostSnapshotEur * 1000000) / 1000000
+          ? roundCostPrecision(payload.unitCostSnapshotEur)
           : null,
       total_cost:
         payload.sourceType === 'raw' &&
         payload.totalCostSnapshotEur != null &&
         Number.isFinite(payload.totalCostSnapshotEur)
-          ? Math.round(payload.totalCostSnapshotEur * 1000000) / 1000000
+          ? roundCostPrecision(payload.totalCostSnapshotEur)
           : null,
       sub_recipe_usage_mode:
         payload.sourceType === 'subrecipe' ? (payload.subRecipeUsageMode ?? null) : null,
@@ -947,13 +947,13 @@ export async function insertEscandalloLinesBatch(
         payload.sourceType === 'raw' &&
         payload.unitCostSnapshotEur != null &&
         Number.isFinite(payload.unitCostSnapshotEur)
-          ? Math.round(payload.unitCostSnapshotEur * 1000000) / 1000000
+          ? roundCostPrecision(payload.unitCostSnapshotEur)
           : null,
       total_cost:
         payload.sourceType === 'raw' &&
         payload.totalCostSnapshotEur != null &&
         Number.isFinite(payload.totalCostSnapshotEur)
-          ? Math.round(payload.totalCostSnapshotEur * 1000000) / 1000000
+          ? roundCostPrecision(payload.totalCostSnapshotEur)
           : null,
       sub_recipe_usage_mode:
         payload.sourceType === 'subrecipe' ? (payload.subRecipeUsageMode ?? null) : null,
@@ -1044,13 +1044,13 @@ export async function updateEscandalloLine(
   if (patch.unitCostSnapshotEur !== undefined) {
     row.unit_cost =
       patch.unitCostSnapshotEur != null && Number.isFinite(patch.unitCostSnapshotEur)
-        ? Math.round(patch.unitCostSnapshotEur * 1000000) / 1000000
+        ? roundCostPrecision(patch.unitCostSnapshotEur)
         : null;
   }
   if (patch.totalCostSnapshotEur !== undefined) {
     row.total_cost =
       patch.totalCostSnapshotEur != null && Number.isFinite(patch.totalCostSnapshotEur)
-        ? Math.round(patch.totalCostSnapshotEur * 1000000) / 1000000
+        ? roundCostPrecision(patch.totalCostSnapshotEur)
         : null;
   }
   if (patch.subRecipeUsageMode !== undefined) row.sub_recipe_usage_mode = patch.subRecipeUsageMode;
@@ -1111,7 +1111,7 @@ function recipeLinesTotalRecursive(
     }).totalCost;
   }
   expanding.delete(recipeId);
-  return Math.round(sum * 100) / 100;
+  return roundCostPrecision(sum);
 }
 
 function centralKitchenLineUnitPriceEur(
@@ -1121,13 +1121,13 @@ function centralKitchenLineUnitPriceEur(
   if (item.unitCost == null || !Number.isFinite(item.unitCost) || item.unitCost <= 0) return 0;
   const fromUnit = String(item.outputUnit ?? '').trim().toLowerCase();
   const toUnit = sanitizeEscandalloIngredientUnit(String(line.unit)).trim().toLowerCase();
-  if (unitsMatchForIngredientCost(fromUnit, toUnit)) return roundMoney(item.unitCost);
+  if (unitsMatchForIngredientCost(fromUnit, toUnit)) return roundCostPrecision(item.unitCost);
   if (!unitCompatible(fromUnit, toUnit)) return 0;
   const baseQtyForOneRequested = convertQuantity(1, toUnit, fromUnit);
   if (baseQtyForOneRequested == null || !Number.isFinite(baseQtyForOneRequested) || baseQtyForOneRequested <= 0) {
     return 0;
   }
-  return roundMoney(item.unitCost * baseQtyForOneRequested);
+  return roundCostPrecision(item.unitCost * baseQtyForOneRequested);
 }
 
 export function subrecipeLineUsesOperationalPortion(
@@ -1151,7 +1151,7 @@ function subrecipeYieldUnitPriceFromSheet(
   if (!sheet) return null;
   if (subrecipeLineUsesOperationalPortion(line, sheet)) {
     if (sheet.operationalCost != null && Number.isFinite(sheet.operationalCost) && sheet.operationalCost >= 0) {
-      return roundMoney(sheet.operationalCost);
+      return roundCostPrecision(sheet.operationalCost);
     }
     return 0;
   }
@@ -1170,7 +1170,7 @@ function subrecipeYieldUnitPriceFromSheet(
       : computeYieldCostPerUnit(sheet.yieldCostTotal, yieldQty);
   if (costPerUnit == null) return null;
   const perRequestedUnit = computeOperationalCost(costPerUnit, yieldUnit, 1, line.unit);
-  return perRequestedUnit != null ? roundMoney(perRequestedUnit) : null;
+  return perRequestedUnit != null ? roundCostPrecision(perRequestedUnit) : null;
 }
 
 export type ResolvedEscandalloLineCost = {
@@ -1197,7 +1197,7 @@ function resolveSubrecipeStandardPortionCost(
   }
   const unitCost =
     sheet.operationalCost != null && Number.isFinite(sheet.operationalCost) && sheet.operationalCost >= 0
-      ? roundMoney(sheet.operationalCost)
+      ? roundCostPrecision(sheet.operationalCost)
       : 0;
   const detailParts: string[] = [];
   if (sheet.operationalQuantity != null && sheet.operationalUnit) {
@@ -1209,7 +1209,7 @@ function resolveSubrecipeStandardPortionCost(
   return {
     displayUnit: 'ración',
     unitCost,
-    totalCost: roundMoney(line.qty * unitCost),
+    totalCost: roundCostPrecision(line.qty * unitCost),
     costBasis: unitCost > 0 ? 'operational_cost' : 'missing',
     detailLabel: unitCost > 0 ? detailParts.join(' · ') || 'Ración estándar' : 'Uso operativo pendiente',
   };
@@ -1242,7 +1242,7 @@ export function resolveLineCost(
   return {
     displayUnit: line.unit,
     unitCost,
-    totalCost: roundMoney(line.qty * unitCost),
+    totalCost: roundCostPrecision(line.qty * unitCost),
     costBasis,
     detailLabel: formatUnitPriceEur(unitCost, line.unit),
   };
@@ -1279,7 +1279,7 @@ export function lineUnitPriceEur(
       innerCtx.expanding,
     );
     const denom = effectiveRecipeYieldQtyForCost(sub);
-    return denom > 0 ? roundMoney(total / denom) : 0;
+    return denom > 0 ? roundCostPrecision(total / denom) : 0;
   }
   if (line.sourceType === 'raw' && line.rawSupplierProductId) {
     if (
@@ -1288,7 +1288,7 @@ export function lineUnitPriceEur(
       Number.isFinite(line.unitCostSnapshotEur) &&
       line.unitCostSnapshotEur >= 0
     ) {
-      return roundMoney(line.unitCostSnapshotEur);
+      return roundCostPrecision(line.unitCostSnapshotEur);
     }
     const p = rawProductById.get(line.rawSupplierProductId);
     if (p) return rawSupplierLineUnitPriceEur(line, p);
@@ -1309,7 +1309,7 @@ export function lineUnitPriceEur(
         raw,
       );
       const totalInput = unitRaw * p.inputQty + p.extraCostEur;
-      return roundMoney(totalInput / p.outputQty);
+      return roundCostPrecision(totalInput / p.outputQty);
     }
   }
   if (line.sourceType === 'central_kitchen' && line.centralProductionRecipeId) {
@@ -1343,7 +1343,7 @@ export function recipeTotalCostEur(
   for (const line of lines) {
     sum += resolveLineCost(line, rawProductById, processedById, innerCtx).totalCost;
   }
-  return Math.round(sum * 100) / 100;
+  return roundCostPrecision(sum);
 }
 
 /** Precio neto (sin IVA) por unidad de venta, a partir del PVP con IVA. */

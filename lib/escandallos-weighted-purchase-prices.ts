@@ -1,4 +1,5 @@
 import { billingQuantityForLine, type PedidoOrder } from '@/lib/pedidos-supabase';
+import { roundCostPrecision } from '@/lib/money-format';
 
 /** Ventana móvil (días) para PMP en escandallos; alineada con el preset habitual de Pedidos → Precios. */
 export const ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS = 90;
@@ -77,7 +78,7 @@ export function computeWeightedAvgBySupplierProductId(
 
   const out = new Map<string, { weightedAvg: number; weightedQty: number }>();
   for (const [id, { wSum, wQty }] of acc) {
-    if (wQty > 0) out.set(id, { weightedAvg: Math.round((wSum / wQty) * 100) / 100, weightedQty: wQty });
+    if (wQty > 0) out.set(id, { weightedAvg: roundCostPrecision(wSum / wQty), weightedQty: wQty });
   }
   return out;
 }

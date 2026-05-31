@@ -7,6 +7,7 @@ import {
 } from '@/lib/purchase-articles-supabase';
 import { pedidosDiagLog } from '@/lib/pedidos-page-diag';
 import { comparablePriceDisplayUnit, comparablePriceHistoryPair } from '@/lib/price-evolution-comparable';
+import { roundCostPrecision } from '@/lib/money-format';
 import type { Unit } from '@/lib/types';
 
 /**
@@ -2733,7 +2734,7 @@ export function computeComparablePmpFromHistoricoRows(
   }
   if (!hasRow || qty <= 0) return null;
   return {
-    weightedAvg: Math.round((amount / qty) * 10000) / 10000,
+    weightedAvg: roundCostPrecision(amount / qty),
     weightedQty: Math.round(qty * 1_000_000) / 1_000_000,
     displayUnit,
   };
