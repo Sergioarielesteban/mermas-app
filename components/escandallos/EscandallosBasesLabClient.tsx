@@ -25,13 +25,13 @@ import {
   insertEscandalloRecipe,
   insertProcessedProductForEscandallo,
   rawProductPickerSummaryLine,
-  recipeTotalCostEur,
   type EscandalloLine,
   type EscandalloLineInsertPayload,
   type EscandalloProcessedProduct,
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { recalculateRecipeCost } from '@/lib/escandallos-cost-engine';
 import { formatMoneyEur, formatUnitPriceEur, roundMoney } from '@/lib/money-format';
 import type { Unit } from '@/lib/types';
 
@@ -447,10 +447,15 @@ export default function EscandallosBasesLabClient() {
               .sort((a, b) => a.name.localeCompare(b.name, 'es'))
               .map((r) => {
                 const ls = linesByRecipe[r.id] ?? [];
-                const total = recipeTotalCostEur(ls, rawById, processedById, {
-                  linesByRecipe,
-                  recipesById,
-                  recipeId: r.id,
+                const total = recalculateRecipeCost({
+                  lines: ls,
+                  rawProductById: rawById,
+                  processedById,
+                  context: {
+                    linesByRecipe,
+                    recipesById,
+                    recipeId: r.id,
+                  },
                 });
                 const per = r.yieldQty > 0 ? Math.round((total / r.yieldQty) * 100) / 100 : 0;
                 return (

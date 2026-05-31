@@ -34,6 +34,7 @@ import { formatQuantityWithUnit } from '@/lib/pedidos-format';
 import {
   deleteCatalogPriceHistoryRow,
   deleteHistoricoPreciosForSupplierProduct,
+  computeComparablePmpFromHistoricoRows,
   fetchCatalogPriceHistoryRows,
   fetchSuppliersWithProducts,
   type CatalogPriceHistoryListRow,
@@ -330,7 +331,6 @@ function buildPriceSummariesWithDiagnostics(
       const displayUnit = chosen;
       const points: PricePoint[] = [];
       const purchases: PurchaseRow[] = [];
-      let wSum = 0;
       for (const h of sorted) {
         const iso = h.createdAt;
         const price = h.newPricePerUnit;
@@ -346,11 +346,10 @@ function buildPriceSummariesWithDiagnostics(
         purchases.push({
           date: iso,
           supplier: acc.supplierName,
-          qty: 1,
+          qty: h.cantidadComparable ?? 1,
           unit: displayUnit as Unit,
           price,
         });
-        wSum += price;
       }
       const ordered = [...points].sort((a, b) => {
         const td = Date.parse(a.date) - Date.parse(b.date);
@@ -376,8 +375,9 @@ function buildPriceSummariesWithDiagnostics(
       const delta = Math.round((currentPrice - basePrice) * 100) / 100;
       const deltaPct =
         basePrice > 0 ? Math.round((delta / basePrice) * 10000) / 100 : 0;
-      const wQty = sorted.length;
-      const weightedAvg = wQty > 0 ? Math.round((wSum / wQty) * 100) / 100 : currentPrice;
+      const comparable = computeComparablePmpFromHistoricoRows(sorted);
+      const wQty = comparable?.weightedQty ?? 0;
+      const weightedAvg = comparable?.weightedAvg ?? currentPrice;
       const purchasesSorted = [...purchases].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
       const billOnly = sorted.map((h) => h.newPricePerUnit);
       const vol = sampleStdev(billOnly);
@@ -792,7 +792,7 @@ function drawExecutivePriceChart(
   doc.setFontSize(7);
   doc.setTextColor(...PDF_ZINC_400);
   doc.text(`€/${opts.unit}`, opts.x + 14, cy + innerH * 0.65, { angle: 90 });
-  doc.text('Evolución desde historico_precios (recepción / albarán). Línea roja = precios tras recepción; línea gris = media del periodo.', cx, cy + innerH + 28, { maxWidth: innerW });
+  doc.text('Evolución desde historico_precios (recepción / albarán). Línea roja = precios tras recepción; línea gris = PMP del periodo.', cx, cy + innerH + 28, { maxWidth: innerW });
 
   const tx = (t: number) => cx + ((t - minT) / (maxT - minT || 1)) * innerW;
   const py = (p: number) => cy + innerH - ((p - minP) / range) * innerH;
@@ -1440,7 +1440,7 @@ export default function PedidosPreciosPage() {
     );
     doc.setFontSize(9);
     doc.text(
-      'Referencias con cambios registrados en recepción (historico_precios). Impacto mes: estimación vs media del periodo según número de recepciones en la ventana.',
+      'Referencias con cambios registrados en recepción (historico_precios). Impacto mes: estimación vs PMP del periodo según cantidad comparable en la ventana.',
       40,
       86,
       { maxWidth: pageW - 80 },

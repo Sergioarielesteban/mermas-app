@@ -3,9 +3,9 @@ import type { EscandalloLine, EscandalloProcessedProduct, EscandalloRawProduct, 
 import type { EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
 import {
   foodCostPercentOfNetSale,
-  recipeTotalCostEur,
   saleNetPerUnitFromGross,
 } from '@/lib/escandallos-supabase';
+import { recalculateRecipeCost } from '@/lib/escandallos-cost-engine';
 
 export type EscandalloFoodCostBucket = 'optimal' | 'watch' | 'high' | 'no_pvp' | 'no_lines';
 
@@ -50,12 +50,17 @@ export function buildEscandalloDashboardRows(
   const recipesById = new Map(recipes.map((r) => [r.id, r]));
   return recipes.map((recipe) => {
     const lines = linesByRecipe[recipe.id] ?? [];
-    const totalCostEur = recipeTotalCostEur(lines, rawById, processedById, {
-      linesByRecipe,
-      recipesById,
-      technicalSheetsByRecipe,
-      centralKitchenById,
-      recipeId: recipe.id,
+    const totalCostEur = recalculateRecipeCost({
+      lines,
+      rawProductById: rawById,
+      processedById,
+      context: {
+        linesByRecipe,
+        recipesById,
+        technicalSheetsByRecipe,
+        centralKitchenById,
+        recipeId: recipe.id,
+      },
     });
     const y = recipe.yieldQty > 0 ? recipe.yieldQty : 1;
     const costPerYieldEur = Math.round((totalCostEur / y) * 100) / 100;

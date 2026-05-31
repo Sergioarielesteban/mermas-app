@@ -38,13 +38,13 @@ import {
   foodCostPercentOfNetSale,
   insertEscandalloLinesBatch,
   insertEscandalloRecipe,
-  recipeTotalCostEur,
   saleNetPerUnitFromGross,
   type EscandalloLine,
   type EscandalloProcessedProduct,
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { recalculateRecipeCost } from '@/lib/escandallos-cost-engine';
 import {
   fetchEscandalloTechnicalSheetsMap,
   insertEscandalloTechnicalSheet,
@@ -350,13 +350,19 @@ export default function EscandalloNewRecipeWizard() {
     !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 ? finalWeightNum : yNum;
   const totalCost = useMemo(() => {
     if (!previewBuilt.ok) return 0;
-    return recipeTotalCostEur(tempLines, rawById, processedById, {
-      linesByRecipe,
-      recipesById,
-      centralKitchenById,
-      recipeId: tempRecipeId,
+    return recalculateRecipeCost({
+      lines: tempLines,
+      rawProductById: rawById,
+      processedById,
+      context: {
+        linesByRecipe,
+        recipesById,
+        technicalSheetsByRecipe,
+        centralKitchenById,
+        recipeId: tempRecipeId,
+      },
     });
-  }, [previewBuilt.ok, tempLines, rawById, processedById, linesByRecipe, recipesById, centralKitchenById]);
+  }, [previewBuilt.ok, tempLines, rawById, processedById, linesByRecipe, recipesById, technicalSheetsByRecipe, centralKitchenById]);
   const perYield = effectiveYieldForCost > 0 ? Math.round((totalCost / effectiveYieldForCost) * 100) / 100 : 0;
   const mermaPct =
     !isPlateRecipe && finalWeightNum != null && finalWeightNum > 0 && pesoEntradaKg > 0

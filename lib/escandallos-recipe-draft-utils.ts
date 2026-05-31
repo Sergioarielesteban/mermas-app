@@ -5,7 +5,6 @@ import {
 import type { EscandalloYieldUnit } from '@/lib/escandallo-operational-usage';
 import {
   escandalloRecipeUnitForRawProduct,
-  resolveLineCost,
   type EscandalloLine,
   type EscandalloLineInsertPayload,
   type EscandalloRecipePriceContext,
@@ -13,6 +12,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { resolveEscandalloLineCost } from '@/lib/escandallos-cost-engine';
 import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet-supabase';
 import { parsePriceInput } from '@/lib/money-format';
 import type { EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
@@ -236,12 +236,11 @@ export function estimateDraftRowCostEur(
     centralKitchenById,
     recipeId: rid,
   };
-  const resolved = resolveLineCost(tempLine, rawById, processedById, {
-    linesByRecipe: priceCtx.linesByRecipe,
-    recipesById: priceCtx.recipesById,
-    technicalSheetsByRecipe: priceCtx.technicalSheetsByRecipe,
-    centralKitchenById: priceCtx.centralKitchenById,
-    expanding: new Set<string>([rid]),
+  const resolved = resolveEscandalloLineCost({
+    line: tempLine,
+    rawProductById: rawById,
+    processedById,
+    context: priceCtx,
   });
   if (!Number.isFinite(resolved.totalCost)) return null;
   return resolved.totalCost;

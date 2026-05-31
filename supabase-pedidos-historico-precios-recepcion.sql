@@ -14,13 +14,33 @@ create table if not exists public.historico_precios (
   diferencia numeric(14, 4) not null,
   diferencia_pct numeric(14, 4),
   unidad_comparacion text not null default 'ud',
+  cantidad_comparable numeric(18, 6),
+  importe_comparable numeric(18, 6),
   albaran_id uuid references public.delivery_notes(id) on delete set null,
+  source_order_item_id uuid,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now()
 );
 
+alter table public.historico_precios
+  add column if not exists cantidad_comparable numeric(18, 6),
+  add column if not exists importe_comparable numeric(18, 6),
+  add column if not exists source_order_item_id uuid;
+
 create index if not exists idx_historico_precios_local_product_created
   on public.historico_precios (local_id, supplier_product_id, created_at desc);
+
+create index if not exists idx_historico_precios_local_product_qty
+  on public.historico_precios (local_id, supplier_product_id, created_at desc)
+  where cantidad_comparable is not null and cantidad_comparable > 0;
+
+create unique index if not exists ux_historico_precios_order_item
+  on public.historico_precios (source_order_item_id)
+  where source_order_item_id is not null;
+
+create unique index if not exists ux_historico_precios_albaran_product
+  on public.historico_precios (albaran_id, supplier_product_id)
+  where albaran_id is not null;
 
 create index if not exists idx_historico_precios_local_fecha
   on public.historico_precios (local_id, fecha desc);
@@ -34,7 +54,7 @@ create index if not exists idx_historico_precios_local_proveedor
   where proveedor_id is not null;
 
 comment on table public.historico_precios is
-  'Cambios de precio comparables registrados solo al validar albarán; evolución de precios lee solo esta tabla.';
+  'Recepciones válidas comparables registradas para evolución de precios y PMP real.';
 
 alter table public.historico_precios enable row level security;
 

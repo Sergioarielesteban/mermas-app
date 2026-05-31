@@ -12,12 +12,12 @@ import {
   type EscandalloTechnicalSheetStep,
 } from '@/lib/escandallos-technical-sheet-supabase';
 import {
-  resolveLineCost,
   type EscandalloLine,
   type EscandalloProcessedProduct,
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { resolveEscandalloLineCost } from '@/lib/escandallos-cost-engine';
 import { formatMoneyEur, formatUnitPriceEur } from '@/lib/money-format';
 import { computeProductionRecipeCostBreakdown } from '@/lib/production-recipe-cost';
 import {
@@ -190,12 +190,17 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
     if (props.mode !== 'escandallo') return [];
     const centralKitchenById = props.centralKitchenById ?? new Map();
     return props.lines.map((line) => {
-      const resolved = resolveLineCost(line, props.rawById, props.processedById, {
-        linesByRecipe: props.linesByRecipe,
-        recipesById: props.recipesById,
-        technicalSheetsByRecipe: props.technicalSheetsByRecipe,
-        centralKitchenById,
-        expanding: new Set([props.recipe.id]),
+      const resolved = resolveEscandalloLineCost({
+        line,
+        rawProductById: props.rawById,
+        processedById: props.processedById,
+        context: {
+          linesByRecipe: props.linesByRecipe,
+          recipesById: props.recipesById,
+          technicalSheetsByRecipe: props.technicalSheetsByRecipe,
+          centralKitchenById,
+          recipeId: props.recipe.id,
+        },
       });
       return { line, resolved };
     });

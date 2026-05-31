@@ -7,9 +7,9 @@ import type {
 } from '@/lib/escandallos-supabase';
 import {
   foodCostPercentOfNetSale,
-  recipeTotalCostEur,
   saleNetPerUnitFromGross,
 } from '@/lib/escandallos-supabase';
+import { recalculateRecipeCost } from '@/lib/escandallos-cost-engine';
 
 /** Umbrales orientativos (MVP); ajustables en UI más adelante. */
 export const RENTABILIDAD_DEVIATION_COST_WARN_PCT = 8;
@@ -90,8 +90,18 @@ export function buildRentabilidadRecipeRows(
   return recipes.map((recipe) => {
     const lines = linesByRecipe[recipe.id] ?? [];
     const ctx = { linesByRecipe, recipesById, recipeId: recipe.id };
-    const costTheo = recipeTotalCostEur(lines, rawCatalogById, processedById, ctx);
-    const costReal = recipeTotalCostEur(lines, rawPmpById, processedById, ctx);
+    const costTheo = recalculateRecipeCost({
+      lines,
+      rawProductById: rawCatalogById,
+      processedById,
+      context: ctx,
+    });
+    const costReal = recalculateRecipeCost({
+      lines,
+      rawProductById: rawPmpById,
+      processedById,
+      context: ctx,
+    });
     const y = yieldSafe(recipe.yieldQty);
     const cTy = Math.round((costTheo / y) * 100) / 100;
     const cR = Math.round((costReal / y) * 100) / 100;

@@ -9,10 +9,10 @@ import {
   fetchEscandalloRawProductsWithWeightedPurchasePrices,
   fetchEscandalloRecipes,
   fetchProcessedProductsForEscandallo,
-  recipeTotalCostEur,
   type EscandalloLine,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { recalculateRecipeCost } from '@/lib/escandallos-cost-engine';
 import { roundMoney } from '@/lib/money-format';
 
 type LineRow = {
@@ -115,10 +115,15 @@ export async function fetchEscandalloRecipeUnitCostEur(
   const processedById = new Map(processed.map((p) => [p.id, p]));
 
   const lines = byRecipe[recipeId] ?? [];
-  const total = recipeTotalCostEur(lines, rawById, processedById, {
-    linesByRecipe: byRecipe,
-    recipesById,
-    recipeId: recipe.id,
+  const total = recalculateRecipeCost({
+    lines,
+    rawProductById: rawById,
+    processedById,
+    context: {
+      linesByRecipe: byRecipe,
+      recipesById,
+      recipeId: recipe.id,
+    },
   });
   const div = yieldDivisorForInventoryUnitCost(recipe);
   if (div <= 0 || !Number.isFinite(total)) {

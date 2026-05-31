@@ -14,9 +14,9 @@ import {
   fetchEscandalloRecipes,
   fetchProcessedProductsForEscandallo,
   effectiveRecipeYieldQtyForCost,
-  recipeTotalCostEur,
   type EscandalloLine,
 } from '@/lib/escandallos-supabase';
+import { recalculateRecipeCost } from '@/lib/escandallos-cost-engine';
 import {
   fetchPurchaseArticleCostHintsByIds,
   fetchPurchaseArticles,
@@ -133,12 +133,12 @@ export default function ProductosPage() {
       }
     }
 
-    const total = recipeTotalCostEur(
-      linesByRecipe[recipe.id] ?? [],
-      new Map(rawProducts.map((x) => [x.id, x])),
-      new Map(processedProducts.map((x) => [x.id, x])),
-      { linesByRecipe, recipesById, recipeId: recipe.id },
-    );
+    const total = recalculateRecipeCost({
+      lines: linesByRecipe[recipe.id] ?? [],
+      rawProductById: new Map(rawProducts.map((x) => [x.id, x])),
+      processedById: new Map(processedProducts.map((x) => [x.id, x])),
+      context: { linesByRecipe, recipesById, recipeId: recipe.id },
+    });
     if (!Number.isFinite(total) || total <= 0) return null;
     const perUnit = Math.round((total / effectiveRecipeYieldQtyForCost(recipe)) * 10000) / 10000;
     return perUnit > 0 ? perUnit : null;
@@ -363,12 +363,12 @@ export default function ProductosPage() {
         recipes.forEach((r, i) => {
           linesByRecipe[r.id] = linesList[i];
         });
-        const total = recipeTotalCostEur(
-          linesByRecipe[recipe.id] ?? [],
-          new Map(rawProducts.map((x) => [x.id, x])),
-          new Map(processedProducts.map((x) => [x.id, x])),
-          { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
-        );
+        const total = recalculateRecipeCost({
+          lines: linesByRecipe[recipe.id] ?? [],
+          rawProductById: new Map(rawProducts.map((x) => [x.id, x])),
+          processedById: new Map(processedProducts.map((x) => [x.id, x])),
+          context: { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
+        });
         const denom = effectiveRecipeYieldQtyForCost(recipe);
         setBaseSubrecipeAutoPrice(total > 0 ? Math.round((total / denom) * 10000) / 10000 : 0);
       } catch {
@@ -466,12 +466,12 @@ export default function ProductosPage() {
               }
             }
           }
-          const total = recipeTotalCostEur(
-            linesByRecipe[recipeId] ?? [],
-            new Map(rawProducts.map((x) => [x.id, x])),
-            new Map(processedProducts.map((x) => [x.id, x])),
-            { linesByRecipe, recipesById, recipeId },
-          );
+          const total = recalculateRecipeCost({
+            lines: linesByRecipe[recipeId] ?? [],
+            rawProductById: new Map(rawProducts.map((x) => [x.id, x])),
+            processedById: new Map(processedProducts.map((x) => [x.id, x])),
+            context: { linesByRecipe, recipesById, recipeId },
+          });
           const per = total > 0 ? Math.round((total / effectiveRecipeYieldQtyForCost(recipe)) * 10000) / 10000 : null;
           escandalloCostCache.set(recipeId, per);
           return per;
@@ -594,12 +594,12 @@ export default function ProductosPage() {
       recipes.forEach((r, i) => {
         linesByRecipe[r.id] = linesList[i];
       });
-      const total = recipeTotalCostEur(
-        linesByRecipe[recipe.id] ?? [],
-        new Map(rawProducts.map((x) => [x.id, x])),
-        new Map(processedProducts.map((x) => [x.id, x])),
-        { linesByRecipe, recipesById, recipeId: recipe.id },
-      );
+      const total = recalculateRecipeCost({
+        lines: linesByRecipe[recipe.id] ?? [],
+        rawProductById: new Map(rawProducts.map((x) => [x.id, x])),
+        processedById: new Map(processedProducts.map((x) => [x.id, x])),
+        context: { linesByRecipe, recipesById, recipeId: recipe.id },
+      });
       const denom = effectiveRecipeYieldQtyForCost(recipe);
       return total > 0 && denom > 0 ? Math.round((total / denom) * 100) / 100 : null;
     }
@@ -638,12 +638,12 @@ export default function ProductosPage() {
             }
           }
         }
-        const total = recipeTotalCostEur(
-          linesByRecipe[recipeId] ?? [],
-          new Map(rawProducts.map((x) => [x.id, x])),
-          new Map(processedProducts.map((x) => [x.id, x])),
-          { linesByRecipe, recipesById, recipeId },
-        );
+        const total = recalculateRecipeCost({
+          lines: linesByRecipe[recipeId] ?? [],
+          rawProductById: new Map(rawProducts.map((x) => [x.id, x])),
+          processedById: new Map(processedProducts.map((x) => [x.id, x])),
+          context: { linesByRecipe, recipesById, recipeId },
+        });
         const per = total > 0 ? Math.round((total / effectiveRecipeYieldQtyForCost(recipe)) * 100) / 100 : null;
         escandalloCostCache.set(recipeId, per);
         return per;

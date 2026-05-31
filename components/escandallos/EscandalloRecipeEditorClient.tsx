@@ -54,8 +54,6 @@ import {
   fetchEscandalloRawProductsWithWeightedPurchasePrices,
   foodCostPercentOfNetSale,
   insertEscandalloLinesBatch,
-  recipeTotalCostEur,
-  resolveLineCost,
   saleNetPerUnitFromGross,
   effectiveRecipeYieldQtyForCost,
   subrecipeLineUsesOperationalPortion,
@@ -65,6 +63,7 @@ import {
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { recalculateRecipeCost, resolveEscandalloLineCost } from '@/lib/escandallos-cost-engine';
 import { formatMoneyEur, formatUnitPriceEur } from '@/lib/money-format';
 import { rawIngredientWeightDetail, totalInputWeightKg } from '@/lib/escandallo-input-weight';
 import { fetchCentralKitchenPublicCatalog, type EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
@@ -169,14 +168,17 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     }
     return `${subtitleKindLabel} · ${draftYieldQty || recipe.yieldQty} ${draftYieldLabel || recipe.yieldLabel}`;
   }, [recipe, draftFinalWeightQty, draftFinalWeightUnit, draftYieldQty, draftYieldLabel]);
-  const priceInner = useMemo(
-    () => ({
+  const priceContext = useMemo(
+    () =>
+      recipe
+        ? {
       linesByRecipe,
       recipesById,
       technicalSheetsByRecipe,
       centralKitchenById,
-      expanding: new Set<string>(recipe ? [recipe.id] : []),
-    }),
+            recipeId: recipe.id,
+          }
+        : undefined,
     [linesByRecipe, recipesById, technicalSheetsByRecipe, centralKitchenById, recipe],
   );
 
@@ -408,14 +410,13 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
 
   const totalCostLive = useMemo(() => {
     if (!recipe) return 0;
-    return recipeTotalCostEur(lines, rawById, processedById, {
-      linesByRecipe,
-      recipesById,
-      technicalSheetsByRecipe,
-      centralKitchenById,
-      recipeId: recipe.id,
+    return recalculateRecipeCost({
+      lines,
+      rawProductById: rawById,
+      processedById,
+      context: priceContext,
     });
-  }, [lines, rawById, processedById, linesByRecipe, recipesById, technicalSheetsByRecipe, centralKitchenById, recipe]);
+  }, [lines, rawById, processedById, priceContext, recipe]);
 
   const yLive = parseDecimal(draftYieldQty) ?? recipe?.yieldQty ?? 1;
   const finalWeightLive = parseDecimal(draftFinalWeightQty);
@@ -956,7 +957,12 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                 ) : (
                   <ul className="space-y-1">
                     {sortedLines.map((line) => {
-                      const resolvedCost = resolveLineCost(line, rawById, processedById, priceInner);
+                      const resolvedCost = resolveEscandalloLineCost({
+                        line,
+                        rawProductById: rawById,
+                        processedById,
+                        context: priceContext,
+                      });
                       const unitEur = resolvedCost.unitCost;
                       const lineCost = resolvedCost.totalCost;
                       const parsed = parseLineLabel(line.label);

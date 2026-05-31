@@ -1268,13 +1268,11 @@ export async function createSupplierProduct(
         isMissingSupplierProductLastReceivedColumnsError(ins.error.message) ||
         isMissingConsumptionPlanColumnError(ins.error.message))
     ) {
-      const {
-        billing_unit: _b,
-        billing_qty_per_order_unit: _q,
-        price_per_billing_unit: _p,
-        consumption_plan: _c,
-        ...legacyInsert
-      } = insertRow;
+      const legacyInsert = { ...insertRow };
+      delete legacyInsert.billing_unit;
+      delete legacyInsert.billing_qty_per_order_unit;
+      delete legacyInsert.price_per_billing_unit;
+      delete legacyInsert.consumption_plan;
       const ins2 = await supabase
         .from('pedido_supplier_products')
         .insert(legacyInsert)
@@ -1458,6 +1456,22 @@ function isMissingHistoricoPreciosTableError(message: string): boolean {
   );
 }
 
+function isMissingHistoricoComparableColumnsError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    (m.includes('cantidad_comparable') || m.includes('importe_comparable')) &&
+    (m.includes('column') || m.includes('schema cache') || m.includes('does not exist') || m.includes('no existe'))
+  );
+}
+
+function isMissingHistoricoSourceOrderItemColumnError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes('source_order_item_id') &&
+    (m.includes('column') || m.includes('schema cache') || m.includes('does not exist') || m.includes('no existe'))
+  );
+}
+
 function isMissingSupplierProductLastReceivedColumnsError(message: string): boolean {
   const m = message.toLowerCase();
   return (
@@ -1493,6 +1507,46 @@ export async function updateSupplierProductLastReceivedPrice(
 
 const HISTORICO_PRICE_EPS = 0.005;
 
+async function historicoRecepcionAlreadyExists(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductId: string,
+  meta: { deliveryNoteId?: string | null; sourceOrderItemId?: string | null },
+): Promise<boolean> {
+  if (meta.sourceOrderItemId) {
+    const { data, error } = await supabase
+      .from('historico_precios')
+      .select('id')
+      .eq('local_id', localId)
+      .eq('supplier_product_id', supplierProductId)
+      .eq('source_order_item_id', meta.sourceOrderItemId)
+      .limit(1);
+    if (error) {
+      if (isMissingHistoricoPreciosTableError(error.message)) return false;
+      if (isMissingHistoricoSourceOrderItemColumnError(error.message)) return false;
+      throw new Error(error.message);
+    }
+    return (data ?? []).length > 0;
+  }
+
+  if (meta.deliveryNoteId) {
+    const { data, error } = await supabase
+      .from('historico_precios')
+      .select('id')
+      .eq('local_id', localId)
+      .eq('supplier_product_id', supplierProductId)
+      .eq('albaran_id', meta.deliveryNoteId)
+      .limit(1);
+    if (error) {
+      if (isMissingHistoricoPreciosTableError(error.message)) return false;
+      throw new Error(error.message);
+    }
+    return (data ?? []).length > 0;
+  }
+
+  return false;
+}
+
 async function fetchLastHistoricoComparablePrice(
   supabase: SupabaseClient,
   localId: string,
@@ -1521,7 +1575,7 @@ async function fetchLastHistoricoComparablePrice(
 
 /**
  * Registra el precio real comparable en `historico_precios` y actualiza `ultimo_precio_recibido`
- * cuando cambia respecto al último histórico (o al precio base del catálogo como baseline).
+ * para toda recepción válida. Si no hay cambio de precio, guarda diferencia 0 para alimentar PMP real.
  *
  * No modifica el precio base del catálogo (`pedido_supplier_products.price_per_unit`): ese valor solo
  * debe cambiar desde la edición manual del artículo/proveedor (u opción explícita futura).
@@ -1536,6 +1590,8 @@ export async function updateSupplierProductPriceFromRecepcion(
     receptionDate: string | null;
     userId?: string | null;
     existingRow?: SupplierProductRow | null;
+    comparableQuantity?: number | null;
+    sourceOrderItemId?: string | null;
   },
 ): Promise<{ changed: boolean }> {
   const row = meta.existingRow ?? (await fetchSupplierProductRow(supabase, localId, supplierProductId));
@@ -1557,20 +1613,42 @@ export async function updateSupplierProductPriceFromRecepcion(
   const lastNuevo = await fetchLastHistoricoComparablePrice(supabase, localId, supplierProductId);
   const baseline = lastNuevo != null ? lastNuevo : catalogComparable;
 
-  if (Math.abs(newC - baseline) < HISTORICO_PRICE_EPS) {
+  const comparableQty =
+    meta.comparableQuantity != null && Number.isFinite(meta.comparableQuantity) && meta.comparableQuantity > 0
+      ? Math.round(meta.comparableQuantity * 1_000_000) / 1_000_000
+      : null;
+  const comparableAmount =
+    comparableQty != null
+      ? Math.round(newC * comparableQty * 1_000_000) / 1_000_000
+      : null;
+  const hasComparableReception = comparableQty != null && comparableAmount != null && comparableAmount > 0;
+  const priceChanged = Math.abs(newC - baseline) >= HISTORICO_PRICE_EPS;
+
+  if (!priceChanged && !hasComparableReception) {
     return { changed: false };
   }
 
-  const diff = Math.round((newC - baseline) * 10000) / 10000;
+  if (hasComparableReception) {
+    const exists = await historicoRecepcionAlreadyExists(supabase, localId, supplierProductId, {
+      deliveryNoteId: meta.deliveryNoteId ?? null,
+      sourceOrderItemId: meta.sourceOrderItemId ?? null,
+    });
+    if (exists) {
+      await updateSupplierProductLastReceivedPrice(supabase, localId, supplierProductId, newP, new Date().toISOString());
+      return { changed: false };
+    }
+  }
+
+  const diff = priceChanged ? Math.round((newC - baseline) * 10000) / 10000 : 0;
   const diffPct =
-    baseline > 0 ? Math.round((diff / baseline) * 10000) / 10000 : null;
+    priceChanged && baseline > 0 ? Math.round((diff / baseline) * 10000) / 10000 : 0;
   const fechaYmd =
     meta.receptionDate && /^\d{4}-\d{2}-\d{2}/.test(meta.receptionDate)
       ? meta.receptionDate.slice(0, 10)
       : new Date().toISOString().slice(0, 10);
   const uComp = comparablePriceDisplayUnit(catalogRow);
 
-  const ins = await supabase.from('historico_precios').insert({
+  const historicoRow = {
     local_id: localId,
     articulo_id: row.article_id ?? null,
     proveedor_id: row.supplier_id,
@@ -1581,10 +1659,79 @@ export async function updateSupplierProductPriceFromRecepcion(
     diferencia: diff,
     diferencia_pct: diffPct,
     unidad_comparacion: uComp,
+    cantidad_comparable: comparableQty,
+    importe_comparable: comparableAmount,
     albaran_id: meta.deliveryNoteId ?? null,
+    source_order_item_id: meta.sourceOrderItemId ?? null,
     created_by: meta.userId ?? null,
-  });
+  };
+
+  const ins = await supabase.from('historico_precios').insert(historicoRow);
   if (ins.error) {
+    if (isMissingHistoricoSourceOrderItemColumnError(ins.error.message)) {
+      const legacyRow = {
+        local_id: historicoRow.local_id,
+        articulo_id: historicoRow.articulo_id,
+        proveedor_id: historicoRow.proveedor_id,
+        supplier_product_id: historicoRow.supplier_product_id,
+        fecha: historicoRow.fecha,
+        precio_anterior: historicoRow.precio_anterior,
+        precio_nuevo: historicoRow.precio_nuevo,
+        diferencia: historicoRow.diferencia,
+        diferencia_pct: historicoRow.diferencia_pct,
+        unidad_comparacion: historicoRow.unidad_comparacion,
+        cantidad_comparable: historicoRow.cantidad_comparable,
+        importe_comparable: historicoRow.importe_comparable,
+        albaran_id: historicoRow.albaran_id,
+        created_by: historicoRow.created_by,
+      };
+      const legacy = await supabase.from('historico_precios').insert(legacyRow);
+      if (legacy.error) throw new Error(legacy.error.message);
+      await updateSupplierProductLastReceivedPrice(supabase, localId, supplierProductId, newP, new Date().toISOString());
+      return { changed: true };
+    }
+    if (isMissingHistoricoComparableColumnsError(ins.error.message)) {
+      const legacyRow = {
+        local_id: historicoRow.local_id,
+        articulo_id: historicoRow.articulo_id,
+        proveedor_id: historicoRow.proveedor_id,
+        supplier_product_id: historicoRow.supplier_product_id,
+        fecha: historicoRow.fecha,
+        precio_anterior: historicoRow.precio_anterior,
+        precio_nuevo: historicoRow.precio_nuevo,
+        diferencia: historicoRow.diferencia,
+        diferencia_pct: historicoRow.diferencia_pct,
+        unidad_comparacion: historicoRow.unidad_comparacion,
+        albaran_id: historicoRow.albaran_id,
+        source_order_item_id: historicoRow.source_order_item_id,
+        created_by: historicoRow.created_by,
+      };
+      const legacy = await supabase.from('historico_precios').insert(legacyRow);
+      if (legacy.error) {
+        if (isMissingHistoricoSourceOrderItemColumnError(legacy.error.message)) {
+          const legacyWithoutSource = {
+            local_id: legacyRow.local_id,
+            articulo_id: legacyRow.articulo_id,
+            proveedor_id: legacyRow.proveedor_id,
+            supplier_product_id: legacyRow.supplier_product_id,
+            fecha: legacyRow.fecha,
+            precio_anterior: legacyRow.precio_anterior,
+            precio_nuevo: legacyRow.precio_nuevo,
+            diferencia: legacyRow.diferencia,
+            diferencia_pct: legacyRow.diferencia_pct,
+            unidad_comparacion: legacyRow.unidad_comparacion,
+            albaran_id: legacyRow.albaran_id,
+            created_by: legacyRow.created_by,
+          };
+          const retry = await supabase.from('historico_precios').insert(legacyWithoutSource);
+          if (retry.error) throw new Error(retry.error.message);
+        } else {
+          throw new Error(legacy.error.message);
+        }
+      }
+      await updateSupplierProductLastReceivedPrice(supabase, localId, supplierProductId, newP, new Date().toISOString());
+      return { changed: true };
+    }
     if (isMissingHistoricoPreciosTableError(ins.error.message)) {
       throw new Error(
         'Falta la tabla historico_precios. Ejecuta supabase-pedidos-historico-precios-recepcion.sql en Supabase.',
@@ -1662,6 +1809,38 @@ export function getOrderItemCatalogUnitPriceForEvolution(item: PedidoOrderItem):
   return Math.round(nextCatalogPrice * 10000) / 10000;
 }
 
+export function getOrderItemComparableQuantityForEvolution(item: PedidoOrderItem): number | null {
+  if (lineIsMissingNotReceived(item)) return null;
+  if (receptionBillsByWeight(item)) {
+    if (item.receivedWeightKg != null && Number.isFinite(item.receivedWeightKg) && item.receivedWeightKg > 0) {
+      return Math.round(item.receivedWeightKg * 1_000_000) / 1_000_000;
+    }
+    if (item.unit === 'kg' && item.receivedQuantity > 0) {
+      return Math.round(item.receivedQuantity * 1_000_000) / 1_000_000;
+    }
+    if (
+      item.billingUnit === 'kg' &&
+      item.billingQtyPerOrderUnit != null &&
+      Number.isFinite(item.billingQtyPerOrderUnit) &&
+      item.billingQtyPerOrderUnit > 0 &&
+      item.receivedQuantity > 0
+    ) {
+      return Math.round(item.receivedQuantity * item.billingQtyPerOrderUnit * 1_000_000) / 1_000_000;
+    }
+    if (
+      item.estimatedKgPerUnit != null &&
+      Number.isFinite(item.estimatedKgPerUnit) &&
+      item.estimatedKgPerUnit > 0 &&
+      item.receivedQuantity > 0
+    ) {
+      return Math.round(item.receivedQuantity * item.estimatedKgPerUnit * 1_000_000) / 1_000_000;
+    }
+    return null;
+  }
+  const q = item.receivedQuantity > 0 ? item.receivedQuantity : item.quantity;
+  return q > 0 && Number.isFinite(q) ? Math.round(q * 1_000_000) / 1_000_000 : null;
+}
+
 export async function commitPriceEvolutionFromReceivedOrderItem(
   supabase: SupabaseClient,
   localId: string,
@@ -1688,6 +1867,8 @@ export async function commitPriceEvolutionFromReceivedOrderItem(
       receptionDate: meta?.receivedAt ?? new Date().toISOString(),
       userId: meta?.userId ?? null,
       existingRow: null,
+      comparableQuantity: getOrderItemComparableQuantityForEvolution(item),
+      sourceOrderItemId: item.id,
     },
   );
 }
@@ -1726,6 +1907,9 @@ export type CatalogPriceHistoryListRow = {
   diferenciaPct: number | null;
   albaranId: string | null;
   displayUnit: string;
+  cantidadComparable: number | null;
+  importeComparable: number | null;
+  sourceOrderItemId: string | null;
   isTest: boolean;
   notes: string | null;
 };
@@ -1745,6 +1929,9 @@ function mapHistoricoPrecioRow(r: {
   diferencia_pct: number | string | null;
   albaran_id: string | null;
   unidad_comparacion: string | null;
+  cantidad_comparable?: number | string | null;
+  importe_comparable?: number | string | null;
+  source_order_item_id?: string | null;
   created_at: string;
 }): CatalogPriceHistoryListRow {
   return {
@@ -1758,6 +1945,15 @@ function mapHistoricoPrecioRow(r: {
     diferenciaPct: r.diferencia_pct != null && r.diferencia_pct !== '' ? Number(r.diferencia_pct) : null,
     albaranId: r.albaran_id,
     displayUnit: r.unidad_comparacion != null && String(r.unidad_comparacion).trim() !== '' ? String(r.unidad_comparacion) : 'ud',
+    cantidadComparable:
+      r.cantidad_comparable != null && r.cantidad_comparable !== '' && Number.isFinite(Number(r.cantidad_comparable))
+        ? Number(r.cantidad_comparable)
+        : null,
+    importeComparable:
+      r.importe_comparable != null && r.importe_comparable !== '' && Number.isFinite(Number(r.importe_comparable))
+        ? Number(r.importe_comparable)
+        : null,
+    sourceOrderItemId: r.source_order_item_id ?? null,
     isTest: false,
     notes: null,
   };
@@ -1776,7 +1972,7 @@ export async function fetchCatalogPriceHistoryRows(
   const q = supabase
     .from('historico_precios')
     .select(
-      'id,supplier_product_id,precio_anterior,precio_nuevo,fecha,diferencia_pct,albaran_id,unidad_comparacion,created_at',
+      'id,supplier_product_id,precio_anterior,precio_nuevo,fecha,diferencia_pct,albaran_id,unidad_comparacion,cantidad_comparable,importe_comparable,source_order_item_id,created_at',
     )
     .eq('local_id', localId)
     .gte('created_at', startIso)
@@ -2435,7 +2631,7 @@ export type HistoricoComparableLast = {
   unidad: string;
 };
 
-/** Media del histórico comparable (misma base que evolución de precios) por producto proveedor. */
+/** PMP real del histórico comparable por producto proveedor. */
 export type HistoricoComparableWeighted = {
   weightedAvg: number;
   weightedQty: number;
@@ -2487,9 +2683,42 @@ export async function fetchLastHistoricoComparableBySupplierProductIds(
 }
 
 /**
- * PMP desde `historico_precios` en la misma ventana y con la misma unidad comparable
- * que usa Pedidos → Evolución de precios.
+ * PMP real desde `historico_precios`.
+ * No usa media simple: requiere cantidad comparable fiable.
  */
+export type ComparablePmpHistoricoRow = {
+  supplierProductId: string | null;
+  displayUnit: string | null;
+  cantidadComparable: number | string | null | undefined;
+  importeComparable: number | string | null | undefined;
+};
+
+export function computeComparablePmpFromHistoricoRows(
+  rows: readonly ComparablePmpHistoricoRow[],
+): { weightedAvg: number; weightedQty: number; displayUnit: string } | null {
+  let amount = 0;
+  let qty = 0;
+  let displayUnit = 'ud';
+  let hasRow = false;
+  for (const row of rows) {
+    const rowQty = Number(row.cantidadComparable);
+    if (!Number.isFinite(rowQty) || rowQty <= 0) continue;
+    const rowAmount = Number(row.importeComparable);
+    if (!Number.isFinite(rowAmount) || rowAmount <= 0) continue;
+    amount += rowAmount;
+    qty += rowQty;
+    hasRow = true;
+    const unit = row.displayUnit != null && String(row.displayUnit).trim() !== '' ? String(row.displayUnit).trim() : '';
+    if (unit) displayUnit = unit;
+  }
+  if (!hasRow || qty <= 0) return null;
+  return {
+    weightedAvg: Math.round((amount / qty) * 10000) / 10000,
+    weightedQty: Math.round(qty * 1_000_000) / 1_000_000,
+    displayUnit,
+  };
+}
+
 export async function fetchWeightedAvgHistoricoComparableBySupplierProductIds(
   supabase: SupabaseClient,
   localId: string,
@@ -2506,7 +2735,7 @@ export async function fetchWeightedAvgHistoricoComparableBySupplierProductIds(
 
   const { data, error } = await supabase
     .from('historico_precios')
-    .select('supplier_product_id,precio_nuevo,unidad_comparacion,created_at')
+    .select('supplier_product_id,precio_nuevo,unidad_comparacion,cantidad_comparable,importe_comparable,created_at')
     .eq('local_id', localId)
     .in('supplier_product_id', supplierProductIds)
     .gte('created_at', startIso)
@@ -2515,36 +2744,39 @@ export async function fetchWeightedAvgHistoricoComparableBySupplierProductIds(
 
   if (error) {
     if (isMissingHistoricoPreciosTableError(error.message)) return out;
+    if (isMissingHistoricoComparableColumnsError(error.message)) return out;
     throw new Error(error.message);
   }
 
-  const grouped = new Map<string, { sum: number; qty: number; unidad: string }>();
+  const grouped = new Map<string, { unidad: string; rows: ComparablePmpHistoricoRow[] }>();
   for (const row of (data ?? []) as Array<{
     supplier_product_id: string | null;
-    precio_nuevo: number | string | null;
     unidad_comparacion?: string | null;
+    cantidad_comparable?: number | string | null;
+    importe_comparable?: number | string | null;
   }>) {
     const sid = row.supplier_product_id != null ? String(row.supplier_product_id) : '';
     if (!sid) continue;
-    const precio = Number(row.precio_nuevo);
-    if (!Number.isFinite(precio) || precio <= 0) continue;
-    const unidad =
-      row.unidad_comparacion != null && String(row.unidad_comparacion).trim() !== ''
-        ? String(row.unidad_comparacion).trim()
-        : 'ud';
-    const cur = grouped.get(sid) ?? { sum: 0, qty: 0, unidad };
-    cur.sum += precio;
-    cur.qty += 1;
-    if (!cur.unidad && unidad) cur.unidad = unidad;
-    grouped.set(sid, cur);
+    const unit = row.unidad_comparacion != null && String(row.unidad_comparacion).trim() !== '' ? String(row.unidad_comparacion).trim() : 'ud';
+    const cur = grouped.get(sid);
+    if (cur && cur.unidad !== unit) continue;
+    const next = cur ?? { unidad: unit, rows: [] as ComparablePmpHistoricoRow[] };
+    next.rows.push({
+      supplierProductId: sid,
+      displayUnit: unit,
+      cantidadComparable: row.cantidad_comparable,
+      importeComparable: row.importe_comparable,
+    });
+    grouped.set(sid, next);
   }
 
-  for (const [sid, cur] of grouped.entries()) {
-    if (cur.qty <= 0) continue;
+  for (const [sid, groupedRows] of grouped.entries()) {
+    const cur = computeComparablePmpFromHistoricoRows(groupedRows.rows);
+    if (!cur) continue;
     out.set(sid, {
-      weightedAvg: Math.round((cur.sum / cur.qty) * 100) / 100,
-      weightedQty: cur.qty,
-      unidad: cur.unidad || 'ud',
+      weightedAvg: cur.weightedAvg,
+      weightedQty: cur.weightedQty,
+      unidad: groupedRows.unidad || cur.displayUnit || 'ud',
     });
   }
   return out;
@@ -2621,7 +2853,7 @@ export async function fetchReceptionEuroPerKgHintsBySupplierProductIds(
   return out;
 }
 
-/** Media de €/kg declarados en recepciones anteriores (PMP simple por líneas con dato). */
+/** Último €/kg declarado en recepciones anteriores (no es PMP). */
 export async function fetchAvgReceivedPricePerKgBySupplierProductIds(
   supabase: SupabaseClient,
   localId: string,

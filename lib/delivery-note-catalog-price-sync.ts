@@ -45,6 +45,7 @@ export async function syncCatalogPricesFromValidatedDeliveryNote(
         receptionDate,
         userId,
         existingRow: cat,
+        comparableQuantity: item.quantity > 0 ? item.quantity : null,
       });
       if (changed) updated += 1;
       else unchanged += 1;
