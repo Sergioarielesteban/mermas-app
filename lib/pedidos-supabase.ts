@@ -355,6 +355,7 @@ export type PedidoOrder = {
 export type SupplierProductPriceHistory = {
   supplierProductId: string;
   lastPrice: number;
+  /** PMP real: SUM(importe_comparable) / SUM(cantidad_comparable). No es media simple. */
   avgPrice: number;
   minPrice: number;
   maxPrice: number;
@@ -2558,7 +2559,7 @@ export async function fetchSupplierProductPriceHistory(
   if (!supplierProductIds.length) return new Map<string, SupplierProductPriceHistory>();
   const { data, error } = await supabase
     .from('historico_precios')
-    .select('supplier_product_id,precio_nuevo,created_at')
+    .select('supplier_product_id,precio_nuevo,unidad_comparacion,cantidad_comparable,importe_comparable,created_at')
     .eq('local_id', localId)
     .in('supplier_product_id', supplierProductIds)
     .order('created_at', { ascending: false });
@@ -2568,23 +2569,42 @@ export async function fetchSupplierProductPriceHistory(
   }
 
   const out = new Map<string, SupplierProductPriceHistory>();
-  const grouped = new Map<string, number[]>();
-  for (const row of (data ?? []) as Array<{ supplier_product_id: string; precio_nuevo: number | string }>) {
+  const grouped = new Map<string, Array<{
+    supplier_product_id: string;
+    precio_nuevo: number | string;
+    unidad_comparacion: string | null;
+    cantidad_comparable: number | string | null;
+    importe_comparable: number | string | null;
+  }>>();
+  for (const row of (data ?? []) as Array<{
+    supplier_product_id: string;
+    precio_nuevo: number | string;
+    unidad_comparacion: string | null;
+    cantidad_comparable: number | string | null;
+    importe_comparable: number | string | null;
+  }>) {
     if (!row.supplier_product_id) continue;
     const list = grouped.get(row.supplier_product_id) ?? [];
-    list.push(Number(row.precio_nuevo));
+    list.push(row);
     grouped.set(row.supplier_product_id, list);
   }
-  for (const [id, prices] of grouped.entries()) {
+  for (const [id, rows] of grouped.entries()) {
+    const prices = rows.map((row) => Number(row.precio_nuevo)).filter((n) => Number.isFinite(n));
     if (!prices.length) continue;
-    const sum = prices.reduce((acc, n) => acc + n, 0);
+    const comparableRows = rows.map((row) => ({
+      supplierProductId: row.supplier_product_id,
+      displayUnit: row.unidad_comparacion,
+      cantidadComparable: row.cantidad_comparable,
+      importeComparable: row.importe_comparable,
+    }));
+    const pmp = computeComparablePmpFromHistoricoRows(comparableRows);
     out.set(id, {
       supplierProductId: id,
       lastPrice: prices[0],
-      avgPrice: Math.round((sum / prices.length) * 100) / 100,
+      avgPrice: pmp?.weightedAvg ?? 0,
       minPrice: Math.min(...prices),
       maxPrice: Math.max(...prices),
-      samples: prices.length,
+      samples: comparableRows.length,
     });
   }
   return out;
@@ -2853,43 +2873,67 @@ export async function fetchReceptionEuroPerKgHintsBySupplierProductIds(
   return out;
 }
 
-/** Último €/kg declarado en recepciones anteriores (no es PMP). */
-export async function fetchAvgReceivedPricePerKgBySupplierProductIds(
+/** PMP real por producto desde histórico comparable: SUM(importe_comparable) / SUM(cantidad_comparable). */
+export async function fetchSupplierProductWeightedReceivedPrices(
   supabase: SupabaseClient,
   localId: string,
   supplierProductIds: string[],
+  opts: { unit?: string | null } = {},
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (!supplierProductIds.length) return out;
 
   const { data, error } = await supabase
-    .from('purchase_order_items')
-    .select('supplier_product_id,received_price_per_kg')
+    .from('historico_precios')
+    .select('supplier_product_id,unidad_comparacion,cantidad_comparable,importe_comparable,created_at')
     .eq('local_id', localId)
     .in('supplier_product_id', supplierProductIds)
-    .not('received_price_per_kg', 'is', null)
-    .gt('received_price_per_kg', 0);
-  if (error) throw new Error(error.message);
+    .order('created_at', { ascending: false });
+  if (error) {
+    if (isMissingHistoricoPreciosTableError(error.message)) return out;
+    if (isMissingHistoricoComparableColumnsError(error.message)) return out;
+    throw new Error(error.message);
+  }
 
-  const sums = new Map<string, { sum: number; count: number }>();
+  const unitFilter = opts.unit != null && opts.unit.trim() !== '' ? opts.unit.trim().toLowerCase() : null;
+  const grouped = new Map<string, { unit: string; rows: ComparablePmpHistoricoRow[] }>();
   for (const row of (data ?? []) as Array<{
     supplier_product_id: string | null;
-    received_price_per_kg: number | string | null;
+    unidad_comparacion?: string | null;
+    cantidad_comparable?: number | string | null;
+    importe_comparable?: number | string | null;
   }>) {
-    const sid = row.supplier_product_id;
+    const sid = row.supplier_product_id != null ? String(row.supplier_product_id) : '';
     if (!sid) continue;
-    const v = Number(row.received_price_per_kg);
-    if (!Number.isFinite(v) || v <= 0) continue;
-    const cur = sums.get(sid) ?? { sum: 0, count: 0 };
-    cur.sum += v;
-    cur.count += 1;
-    sums.set(sid, cur);
+    const unit = row.unidad_comparacion != null && String(row.unidad_comparacion).trim() !== '' ? String(row.unidad_comparacion).trim() : 'ud';
+    if (unitFilter && unit.toLowerCase() !== unitFilter) continue;
+    const cur = grouped.get(sid);
+    if (cur && cur.unit !== unit) continue;
+    const next = cur ?? { unit, rows: [] as ComparablePmpHistoricoRow[] };
+    next.rows.push({
+      supplierProductId: sid,
+      displayUnit: unit,
+      cantidadComparable: row.cantidad_comparable,
+      importeComparable: row.importe_comparable,
+    });
+    grouped.set(sid, next);
   }
-  for (const [sid, { sum, count }] of sums) {
-    if (count < 1) continue;
-    out.set(sid, Math.round((sum / count) * 10000) / 10000);
+
+  for (const [sid, groupedRows] of grouped.entries()) {
+    const pmp = computeComparablePmpFromHistoricoRows(groupedRows.rows);
+    if (!pmp) continue;
+    out.set(sid, pmp.weightedAvg);
   }
   return out;
+}
+
+/** @deprecated Usa fetchSupplierProductWeightedReceivedPrices(). Conserva firma legacy sin media simple. */
+export async function fetchAvgReceivedPricePerKgBySupplierProductIds(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductIds: string[],
+): Promise<Map<string, number>> {
+  return fetchSupplierProductWeightedReceivedPrices(supabase, localId, supplierProductIds, { unit: 'kg' });
 }
 
 /**

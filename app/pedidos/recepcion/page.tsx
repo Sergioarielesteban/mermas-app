@@ -22,10 +22,10 @@ import {
 } from '@/lib/pedidos-recepcion-inputs';
 import {
   billingQuantityForReceptionPrice,
-  fetchAvgReceivedPricePerKgBySupplierProductIds,
   fetchLastHistoricoComparableBySupplierProductIds,
   fetchLastReceivedPricePerKgBySupplierProductIds,
   fetchReceptionEuroPerKgHintsBySupplierProductIds,
+  fetchSupplierProductWeightedReceivedPrices,
   fetchSuppliersWithProducts,
   persistReceptionItemTotals,
   commitPriceEvolutionFromReceivedOrderItem,
@@ -288,7 +288,7 @@ export default function RecepcionPedidosPage() {
   );
 
   const receptionEuroByProductRef = React.useRef<Record<string, number>>({});
-  const avgRecvEuroByProductRef = React.useRef<Record<string, number>>({});
+  const weightedPmpEuroByProductRef = React.useRef<Record<string, number>>({});
   const receptionHintsByProductRef = React.useRef<Map<string, ReceptionEuroPerKgHints>>(new Map());
   const historicoComparableByProductRef = React.useRef<
     Map<string, { precio: number; unidad: string }>
@@ -311,7 +311,7 @@ export default function RecepcionPedidosPage() {
     if (!localId) return;
     if (supplierProductIdsForHints.length === 0) {
       receptionEuroByProductRef.current = {};
-      avgRecvEuroByProductRef.current = {};
+      weightedPmpEuroByProductRef.current = {};
       receptionHintsByProductRef.current = new Map();
       historicoComparableByProductRef.current = new Map();
       setPriceHintsTick((t) => t + 1);
@@ -323,14 +323,14 @@ export default function RecepcionPedidosPage() {
     const ids = supplierProductIdsForHints;
     void Promise.all([
       fetchLastReceivedPricePerKgBySupplierProductIds(supabase, localId, ids),
-      fetchAvgReceivedPricePerKgBySupplierProductIds(supabase, localId, ids),
+      fetchSupplierProductWeightedReceivedPrices(supabase, localId, ids, { unit: 'kg' }),
       fetchReceptionEuroPerKgHintsBySupplierProductIds(supabase, localId, ids),
       fetchLastHistoricoComparableBySupplierProductIds(supabase, localId, ids),
     ])
-      .then(([recvMap, avgMap, hintsMap, historicoMap]) => {
+      .then(([recvMap, pmpMap, hintsMap, historicoMap]) => {
         if (cancelled) return;
         receptionEuroByProductRef.current = Object.fromEntries(recvMap);
-        avgRecvEuroByProductRef.current = Object.fromEntries(avgMap);
+        weightedPmpEuroByProductRef.current = Object.fromEntries(pmpMap);
         receptionHintsByProductRef.current = hintsMap;
         historicoComparableByProductRef.current = historicoMap;
         setPriceHintsTick((t) => t + 1);
@@ -338,7 +338,7 @@ export default function RecepcionPedidosPage() {
       .catch(() => {
         if (cancelled) return;
         receptionEuroByProductRef.current = {};
-        avgRecvEuroByProductRef.current = {};
+        weightedPmpEuroByProductRef.current = {};
         receptionHintsByProductRef.current = new Map();
         historicoComparableByProductRef.current = new Map();
         setPriceHintsTick((t) => t + 1);
@@ -351,7 +351,7 @@ export default function RecepcionPedidosPage() {
   const recepcionLineSuggestionByItemId = React.useMemo(() => {
     const m = new Map<string, ReturnType<typeof resolveEuroPerKgSuggestion>>();
     const recv = receptionEuroByProductRef.current;
-    const avgR = avgRecvEuroByProductRef.current;
+    const pmpR = weightedPmpEuroByProductRef.current;
     const hints = receptionHintsByProductRef.current;
     for (const o of pendingPriceReviewOrders) {
       for (const it of o.items) {
@@ -363,7 +363,7 @@ export default function RecepcionPedidosPage() {
           resolveEuroPerKgSuggestion(it, {
             articleEuroPerKg: h?.articleEuroPerKg ?? null,
             lastReceptionEuroPerKg: sid ? recv[sid] : undefined,
-            avgReceivedEuroPerKg: sid ? avgR[sid] : undefined,
+            weightedPmpEuroPerKg: sid ? pmpR[sid] : undefined,
             liveCatalogBillingEuroPerKg: h?.catalogBillingEuroPerKg ?? null,
           }),
         );
@@ -378,7 +378,7 @@ export default function RecepcionPedidosPage() {
     return resolveEuroPerKgSuggestion(item, {
       articleEuroPerKg: h?.articleEuroPerKg ?? null,
       lastReceptionEuroPerKg: sid ? receptionEuroByProductRef.current[sid] : undefined,
-      avgReceivedEuroPerKg: sid ? avgRecvEuroByProductRef.current[sid] : undefined,
+      weightedPmpEuroPerKg: sid ? weightedPmpEuroByProductRef.current[sid] : undefined,
       liveCatalogBillingEuroPerKg: h?.catalogBillingEuroPerKg ?? null,
     }).value;
   }, []);

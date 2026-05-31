@@ -10,13 +10,13 @@ export type EuroPerKgSuggestionSource =
   | 'order_line_implied_kg'
   | 'article_master'
   | 'last_reception'
-  | 'avg_reception_pmp'
+  | 'weighted_reception_pmp'
   | 'supplier_catalog_billing_kg';
 
 export type EuroPerKgResolutionOpts = {
   articleEuroPerKg?: number | null;
   lastReceptionEuroPerKg?: number | null;
-  avgReceivedEuroPerKg?: number | null;
+  weightedPmpEuroPerKg?: number | null;
   liveCatalogBillingEuroPerKg?: number | null;
 };
 
@@ -85,9 +85,9 @@ export function resolveEuroPerKgSuggestion(
     return { value: roundPpk(lastRecv), source: 'last_reception' };
   }
 
-  const pmp = opts.avgReceivedEuroPerKg;
+  const pmp = opts.weightedPmpEuroPerKg;
   if (pmp != null && Number.isFinite(pmp) && pmp > 0) {
-    return { value: roundPpk(pmp), source: 'avg_reception_pmp' };
+    return { value: roundPpk(pmp), source: 'weighted_reception_pmp' };
   }
 
   const live = opts.liveCatalogBillingEuroPerKg;
@@ -108,8 +108,8 @@ export function euroPerKgSuggestionHint(source: EuroPerKgSuggestionSource | null
       return 'Precio referencia: artículo base / máster (€/kg).';
     case 'last_reception':
       return 'Precio referencia: última recepción con €/kg en este producto.';
-    case 'avg_reception_pmp':
-      return 'Precio referencia: media de €/kg en recepciones anteriores (PMP).';
+    case 'weighted_reception_pmp':
+      return 'Precio referencia: PMP real de recepciones anteriores.';
     case 'supplier_catalog_billing_kg':
       return 'Precio referencia: €/kg actual en catálogo proveedor (factura por kg).';
     default:
