@@ -27,6 +27,8 @@ import {
 } from '@/lib/production-recipes-supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+// ─── Tipos ────────────────────────────────────────────────────────────────────
+
 type EscandalloPayload = {
   mode: 'escandallo';
   recipe: EscandalloRecipe;
@@ -58,6 +60,8 @@ export type RecipeQuickViewModalProps = {
   editHref?: string | null;
 } & (EscandalloPayload | CentralPayload);
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -69,22 +73,32 @@ function pctLabel(value: number | null | undefined): string {
   return value != null && Number.isFinite(value) ? `${Math.round(value * 10) / 10} %` : '—';
 }
 
-function toneClass(value: number | null | undefined, inverse = false): string {
+function fcToneClass(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return 'text-zinc-500';
-  if (inverse) {
-    if (value >= 65) return 'text-emerald-700';
-    if (value >= 55) return 'text-amber-700';
-    return 'text-red-700';
-  }
   if (value <= 30) return 'text-emerald-700';
   if (value <= 35) return 'text-amber-700';
   return 'text-red-700';
 }
 
-function sourceBadge(line: EscandalloLine): string | null {
-  if (line.sourceType === 'subrecipe') return 'BASE';
-  if (line.sourceType === 'processed') return 'ELAB.';
-  if (line.sourceType === 'central_kitchen') return 'COCINA CENTRAL';
+function marginToneClass(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return 'text-zinc-500';
+  if (value >= 65) return 'text-emerald-700';
+  if (value >= 55) return 'text-amber-700';
+  return 'text-red-700';
+}
+
+function barWidth(pct: number | null | undefined, max = 50): string {
+  if (pct == null || !Number.isFinite(pct)) return '0%';
+  return `${Math.min(100, Math.max(6, (pct / max) * 100))}%`;
+}
+
+function sourceBadge(line: EscandalloLine): { label: string; cls: string } | null {
+  if (line.sourceType === 'subrecipe')
+    return { label: 'BASE', cls: 'bg-[#4A6B3A]/10 text-[#35502A] ring-[#4A6B3A]/20' };
+  if (line.sourceType === 'processed')
+    return { label: 'ELAB.', cls: 'bg-zinc-100 text-zinc-600 ring-zinc-200' };
+  if (line.sourceType === 'central_kitchen')
+    return { label: 'COCINA CENTRAL', cls: 'bg-amber-50 text-amber-800 ring-amber-100' };
   return null;
 }
 
@@ -93,40 +107,40 @@ function escandalloTypeLabel(recipe: EscandalloRecipe, sheet: EscandalloTechnica
   return sheet?.categoria?.trim() || 'Plato';
 }
 
-function fcBarWidth(pct: number | null | undefined): string {
-  if (pct == null || !Number.isFinite(pct)) return '0%';
-  return `${Math.min(100, Math.max(6, (pct / 50) * 100))}%`;
+// ─── Subcomponentes ───────────────────────────────────────────────────────────
+
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="border-b border-zinc-100 bg-zinc-50/70 px-4 py-2.5">
+      <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">{children}</h3>
+    </div>
+  );
 }
 
-function fcBarColor(pct: number | null | undefined): string {
-  if (pct == null || !Number.isFinite(pct)) return '#a1a1aa';
-  if (pct <= 30) return '#4A6B3A';
-  if (pct <= 35) return '#B8872A';
-  return '#D32F2F';
-}
-
-function QuickMetric({
+function MetricCard({
   label,
   value,
-  valueClassName = 'text-zinc-950',
-  barPct,
+  valueClass = 'text-zinc-950',
+  bar,
   barColor,
 }: {
   label: string;
   value: string;
-  valueClassName?: string;
-  barPct?: number | null;
+  valueClass?: string;
+  bar?: number | null;
   barColor?: string;
 }) {
   return (
-    <div className="rounded-2xl bg-white px-2.5 py-2.5 shadow-sm ring-1 ring-zinc-200/80 sm:px-3 sm:py-3">
-      <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-zinc-400 sm:text-[9px] sm:tracking-[0.14em]">{label}</p>
-      <p className={`mt-0.5 font-mono text-base font-bold tabular-nums leading-none sm:mt-1 sm:text-[1.15rem] ${valueClassName}`}>{value}</p>
-      {barPct != null && Number.isFinite(barPct) ? (
+    <div className="flex flex-col rounded-2xl bg-white px-3 py-3 shadow-sm ring-1 ring-zinc-200/70">
+      <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{label}</p>
+      <p className={`mt-1 font-mono text-[1.05rem] font-bold tabular-nums leading-none ${valueClass}`}>
+        {value}
+      </p>
+      {bar != null && Number.isFinite(bar) ? (
         <span className="mt-2 block h-1 overflow-hidden rounded-full bg-zinc-100">
           <span
-            className="block h-full rounded-full transition-all duration-300"
-            style={{ width: fcBarWidth(barPct), backgroundColor: barColor ?? fcBarColor(barPct) }}
+            className="block h-full rounded-full"
+            style={{ width: barWidth(bar), backgroundColor: barColor ?? '#a1a1aa', transition: 'width 300ms' }}
           />
         </span>
       ) : null}
@@ -134,10 +148,70 @@ function QuickMetric({
   );
 }
 
+function ConservationSection({ sheet }: { sheet: EscandalloTechnicalSheet }) {
+  const rows = [
+    { label: 'Tipo conservación', value: sheet.tipoConservacion },
+    { label: 'Temperatura', value: sheet.temperaturaConservacion },
+    { label: 'Vida útil', value: sheet.vidaUtil },
+    { label: 'Regeneración', value: sheet.regeneracion },
+    { label: 'Temp. servicio', value: sheet.temperaturaServicio },
+  ].filter((r) => r.value.trim());
+
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="mt-3 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+      <SectionHeader>Conservación y servicio</SectionHeader>
+      <dl className="divide-y divide-zinc-100">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-baseline justify-between gap-4 px-4 py-2.5">
+            <dt className="text-[11px] font-semibold text-zinc-500">{r.label}</dt>
+            <dd className="text-right text-[12px] font-semibold text-zinc-900">{r.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function PhotoBlock({
+  photoUrl,
+  alt,
+  className,
+}: {
+  photoUrl: string | null;
+  alt: string;
+  className?: string;
+}) {
+  if (photoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={photoUrl}
+        alt={alt}
+        loading="lazy"
+        className={className}
+        style={{ objectFit: 'contain' }}
+      />
+    );
+  }
+  return (
+    <div className="grid h-full w-full place-items-center">
+      <div className="flex flex-col items-center gap-2 text-center">
+        <ChefHat className="h-9 w-9 text-zinc-300" strokeWidth={1.5} />
+        <p className="text-[10px] font-medium text-zinc-400">Sin foto de emplatado</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
+
 export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
   const { open, localId, supabase, onClose } = props;
   const mode = props.mode;
   const recipeId = props.recipe.id;
+
   const [sheet, setSheet] = useState<EscandalloTechnicalSheet | null>(null);
   const [steps, setSteps] = useState<EscandalloTechnicalSheetStep[]>([]);
   const [allergens, setAllergens] = useState<RecipeAllergenRow[]>([]);
@@ -153,7 +227,10 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
       setLoading(true);
       if (mode === 'escandallo') {
         void Promise.all([
-          fetchEscandalloTechnicalSheetWithSteps(supabase, localId, recipeId).catch(() => ({ sheet: null, steps: [] })),
+          fetchEscandalloTechnicalSheetWithSteps(supabase, localId, recipeId).catch(() => ({
+            sheet: null,
+            steps: [],
+          })),
           fetchRecipeAllergensForLocal(supabase, localId).catch(() => [] as RecipeAllergenRow[]),
         ])
           .then(([pack, rows]) => {
@@ -209,179 +286,191 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
   if (!open) return null;
 
   const isEsc = props.mode === 'escandallo';
-  const title = isEsc ? props.recipe.name : props.recipe.name;
+  const title = props.recipe.name;
   const updatedAt = isEsc ? props.recipe.updatedAt : props.recipe.updated_at;
   const photoUrl = isEsc ? getOfficialRecipePhotoUrl(sheet) : null;
-  const costPerUnit = isEsc ? props.costPerYieldEur ?? null : centralCost?.unit ?? null;
-  const pvp = isEsc ? props.saleGrossEur ?? null : null;
-  const foodCost = isEsc ? props.foodCostPct ?? null : null;
-  const margin = isEsc ? props.marginPct ?? null : null;
-  const typeLabel = isEsc ? escandalloTypeLabel(props.recipe, sheet) : props.recipe.recipe_category ?? 'Cocina Central';
-  const familyLabel = isEsc ? props.recipe.yieldLabel : props.recipe.operative_format_label ?? props.recipe.final_unit;
+  const costPerUnit = isEsc ? (props.costPerYieldEur ?? null) : (centralCost?.unit ?? null);
+  const pvp = isEsc ? (props.saleGrossEur ?? null) : null;
+  const foodCost = isEsc ? (props.foodCostPct ?? null) : null;
+  const margin = isEsc ? (props.marginPct ?? null) : null;
+  const typeLabel = isEsc
+    ? escandalloTypeLabel(props.recipe, sheet)
+    : (props.recipe.recipe_category ?? 'Cocina Central');
+  const familyLabel = isEsc
+    ? props.recipe.yieldLabel
+    : (props.recipe.operative_format_label ?? props.recipe.final_unit);
   const yieldLabel = isEsc
     ? `${props.recipe.yieldQty} ${props.recipe.yieldLabel}`
     : `${props.recipe.base_yield_quantity} ${props.recipe.final_unit}`;
 
+  const fcColor = foodCost != null ? (foodCost <= 30 ? '#4A6B3A' : foodCost <= 35 ? '#B8872A' : '#D32F2F') : '#a1a1aa';
+  const marginColor = margin != null ? (margin >= 65 ? '#4A6B3A' : margin >= 55 ? '#B8872A' : '#D32F2F') : '#a1a1aa';
+
+  const hasConservation =
+    isEsc &&
+    sheet &&
+    [sheet.tipoConservacion, sheet.temperaturaConservacion, sheet.vidaUtil, sheet.regeneracion, sheet.temperaturaServicio].some(
+      (v) => v?.trim(),
+    );
+
+  const hasEmplatado =
+    isEsc && sheet && (sheet.emplatadoDescripcion || sheet.emplatadoDecoracion || sheet.emplatadoMenaje);
+
   return (
-    <div className="fixed inset-0 z-[120] bg-black/50 backdrop-blur-[2px]" role="dialog" aria-modal="true">
+    <div
+      className="fixed inset-0 z-[120] bg-black/50 backdrop-blur-[2px]"
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="flex min-h-full items-end justify-center p-0 sm:items-center sm:p-4">
-        <section className="flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-[2rem] bg-[#f5f5f7] shadow-[0_24px_80px_rgba(0,0,0,0.18)] sm:max-h-[88vh] sm:max-w-3xl sm:rounded-[2rem]">
-          <header className="relative overflow-hidden bg-gradient-to-b from-white via-white to-[#f5f5f7]">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[radial-gradient(ellipse_at_top,rgba(74,107,58,0.08),transparent_70%)] sm:h-24" />
+        <section className="flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-[2rem] bg-[#F7F3EE] shadow-[0_-8px_60px_rgba(0,0,0,0.18)] sm:max-h-[90vh] sm:max-w-2xl sm:rounded-[2rem] sm:shadow-[0_24px_80px_rgba(0,0,0,0.2)]">
+
+          {/* ── Cabecera ── */}
+          <header className="relative overflow-hidden bg-gradient-to-b from-white to-[#F7F3EE]">
+            {/* Cierre */}
             <button
               type="button"
               onClick={onClose}
-              className="absolute right-3 top-3 z-10 grid h-10 w-10 place-items-center rounded-full bg-white/95 text-zinc-900 shadow-sm ring-1 ring-zinc-200/90 transition hover:scale-[1.03] active:scale-[0.98]"
+              className="absolute right-3 top-3 z-10 grid h-10 w-10 place-items-center rounded-full bg-white/95 text-zinc-700 shadow-sm ring-1 ring-zinc-200/90 transition hover:scale-[1.04] active:scale-[0.97]"
               aria-label="Cerrar"
             >
               <X className="h-5 w-5" />
             </button>
 
-            {/* Móvil: foto ancha, plato completo */}
-            <div className="relative px-4 pb-1 pt-3 sm:hidden">
-              <div className="overflow-hidden rounded-[1.35rem] bg-gradient-to-b from-[#F7F3EE] via-white to-[#FAFAF9] px-3 py-4 shadow-[0_8px_28px_rgba(0,0,0,0.06)] ring-1 ring-zinc-200/80">
-                {photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={photoUrl}
-                    alt=""
-                    loading="lazy"
-                    className="mx-auto block max-h-[min(52vw,240px)] w-full object-contain object-center"
+            {/* Móvil: foto arriba centrada, texto debajo */}
+            <div className="px-4 pb-3 pt-4 sm:hidden">
+              {/* Foto — contenedor adaptable, sin altura fija que fuerce recorte */}
+              <div className="overflow-hidden rounded-[1.25rem] bg-white shadow-[0_6px_24px_rgba(0,0,0,0.07)] ring-1 ring-zinc-200/70">
+                <div className="flex max-h-[72vw] min-h-[48vw] items-center justify-center p-2">
+                  <PhotoBlock
+                    photoUrl={photoUrl}
+                    alt={title}
+                    className="max-h-full max-w-full rounded-xl"
                   />
-                ) : (
-                  <div className="grid min-h-[180px] w-full place-items-center">
-                    <ChefHat className="h-10 w-10 text-zinc-300" strokeWidth={1.8} />
-                  </div>
-                )}
+                </div>
               </div>
-              <div className="mt-3 pr-8 text-left">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">{typeLabel}</p>
-                <h2 className="mt-1 font-serif text-[1.4rem] font-normal leading-[1.1] tracking-tight text-zinc-950">
+              <div className="mt-3 pr-8">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                  {typeLabel}
+                </p>
+                <h2 className="mt-1 font-serif text-[1.35rem] font-normal leading-tight tracking-tight text-zinc-950">
                   {title}
                 </h2>
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-zinc-600 shadow-sm ring-1 ring-zinc-200/80">
-                    {familyLabel}
-                  </span>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-zinc-600 shadow-sm ring-1 ring-zinc-200/80">
-                    {yieldLabel}
-                  </span>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-medium tabular-nums text-zinc-500 shadow-sm ring-1 ring-zinc-200/80">
-                    Act. {formatDate(updatedAt)}
-                  </span>
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-100/90">
-                    {isEsc ? 'Activo' : props.recipe.is_active ? 'Activo' : 'Inactivo'}
-                  </span>
+                  <Chip>{familyLabel}</Chip>
+                  <Chip>{yieldLabel}</Chip>
+                  <Chip muted>Act. {formatDate(updatedAt)}</Chip>
+                  <Chip active>{isEsc ? 'Activo' : props.recipe.is_active ? 'Activo' : 'Inactivo'}</Chip>
                 </div>
               </div>
             </div>
 
-            {/* Escritorio: foto + datos en fila */}
-            <div className="relative hidden gap-5 p-5 sm:grid sm:grid-cols-[12.5rem_1fr]">
-              <div className="mx-auto aspect-square w-52 overflow-hidden rounded-[1.35rem] bg-[#F7F3EE] shadow-[0_8px_28px_rgba(0,0,0,0.08)] ring-1 ring-zinc-200/80">
-                {photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={photoUrl} alt="" loading="lazy" className="h-full w-full object-contain p-1" />
-                ) : (
-                  <div className="grid h-full w-full place-items-center bg-gradient-to-br from-[#F7F3EE] to-white text-center">
-                    <ChefHat className="h-10 w-10 text-zinc-300" strokeWidth={1.8} />
-                  </div>
-                )}
+            {/* Desktop: foto lateral cuadrada + datos */}
+            <div className="relative hidden gap-5 p-5 sm:grid sm:grid-cols-[11rem_1fr]">
+              <div className="aspect-square w-44 overflow-hidden rounded-[1.25rem] bg-white shadow-[0_8px_28px_rgba(0,0,0,0.08)] ring-1 ring-zinc-200/70">
+                <div className="flex h-full w-full items-center justify-center p-2">
+                  <PhotoBlock
+                    photoUrl={photoUrl}
+                    alt={title}
+                    className="max-h-full max-w-full rounded-xl"
+                  />
+                </div>
               </div>
-              <div className="min-w-0 pr-9">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">{typeLabel}</p>
-                <h2 className="mt-1 font-serif text-[1.65rem] font-normal leading-[1.12] tracking-tight text-zinc-950">
+              <div className="min-w-0 pr-10">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                  {typeLabel}
+                </p>
+                <h2 className="mt-1 font-serif text-[1.6rem] font-normal leading-[1.1] tracking-tight text-zinc-950">
                   {title}
                 </h2>
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-zinc-600 shadow-sm ring-1 ring-zinc-200/80">
-                    {familyLabel}
-                  </span>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-zinc-600 shadow-sm ring-1 ring-zinc-200/80">
-                    {yieldLabel}
-                  </span>
-                  <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-medium tabular-nums text-zinc-500 shadow-sm ring-1 ring-zinc-200/80">
-                    Act. {formatDate(updatedAt)}
-                  </span>
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-100/90">
-                    {isEsc ? 'Activo' : props.recipe.is_active ? 'Activo' : 'Inactivo'}
-                  </span>
+                  <Chip>{familyLabel}</Chip>
+                  <Chip>{yieldLabel}</Chip>
+                  <Chip muted>Act. {formatDate(updatedAt)}</Chip>
+                  <Chip active>{isEsc ? 'Activo' : props.recipe.is_active ? 'Activo' : 'Inactivo'}</Chip>
                 </div>
               </div>
             </div>
           </header>
 
+          {/* ── Cuerpo scrollable ── */}
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
             {loading ? (
-              <p className="rounded-2xl bg-white p-4 text-center text-sm text-zinc-500 shadow-sm ring-1 ring-zinc-200/80">
-                Cargando ficha…
+              <p className="rounded-2xl bg-white px-4 py-3 text-center text-[12px] text-zinc-400 shadow-sm ring-1 ring-zinc-100">
+                Cargando ficha técnica…
               </p>
             ) : null}
 
+            {/* ── Métricas de coste ── */}
             <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <QuickMetric label="Coste/ración" value={costPerUnit != null ? formatMoneyEur(costPerUnit) : '—'} />
-              <QuickMetric label="PVP" value={pvp != null ? formatMoneyEur(pvp) : '—'} />
-              <QuickMetric
+              <MetricCard
+                label={isEsc ? 'Coste/ración' : 'Coste unitario'}
+                value={costPerUnit != null ? formatMoneyEur(costPerUnit) : '—'}
+              />
+              <MetricCard label="PVP" value={pvp != null ? formatMoneyEur(pvp) : '—'} />
+              <MetricCard
                 label="Food cost"
                 value={pctLabel(foodCost)}
-                valueClassName={toneClass(foodCost)}
-                barPct={foodCost}
-                barColor={fcBarColor(foodCost)}
+                valueClass={fcToneClass(foodCost)}
+                bar={foodCost}
+                barColor={fcColor}
               />
-              <QuickMetric
+              <MetricCard
                 label="Margen"
                 value={pctLabel(margin)}
-                valueClassName={toneClass(margin, true)}
-                barPct={margin}
-                barColor={margin != null && margin >= 65 ? '#4A6B3A' : margin != null && margin >= 55 ? '#B8872A' : '#D32F2F'}
+                valueClass={marginToneClass(margin)}
+                bar={margin}
+                barColor={marginColor}
               />
             </section>
 
+            {/* ── Ingredientes ── */}
             <section className="mt-3 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/80">
-              <div className="border-b border-zinc-100 bg-zinc-50/70 px-4 py-2.5">
-                <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Ingredientes</h3>
-              </div>
+              <SectionHeader>Ingredientes</SectionHeader>
               {isEsc ? (
-                <ul className="divide-y divide-zinc-100">
-                  {escandalloResolved.map(({ line, resolved }) => {
-                    const badge = sourceBadge(line);
-                    return (
-                      <li key={line.id} className="flex items-start justify-between gap-3 px-4 py-2.5 transition hover:bg-zinc-50/60">
-                        <div className="min-w-0">
-                          <p className="text-[13px] font-semibold leading-snug text-zinc-900">
-                            <span className="mr-1.5 font-mono text-[12px] font-bold tabular-nums text-zinc-500">
-                              {line.qty} {resolved.displayUnit}
-                            </span>
-                            {line.label}
+                escandalloResolved.length > 0 ? (
+                  <ul className="divide-y divide-zinc-100">
+                    {escandalloResolved.map(({ line, resolved }) => {
+                      const badge = sourceBadge(line);
+                      return (
+                        <li
+                          key={line.id}
+                          className="flex items-start justify-between gap-3 px-4 py-2.5 transition hover:bg-zinc-50/60"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-semibold leading-snug text-zinc-900">
+                              <span className="mr-1.5 font-mono text-[11px] font-bold tabular-nums text-zinc-400">
+                                {line.qty} {resolved.displayUnit}
+                              </span>
+                              {line.label}
+                            </p>
+                            {badge ? (
+                              <span
+                                className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.1em] ring-1 ${badge.cls}`}
+                              >
+                                {badge.label}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="shrink-0 font-mono text-[13px] font-bold tabular-nums text-zinc-900">
+                            {formatMoneyEur(resolved.totalCost)}
                           </p>
-                          {badge ? (
-                            <span
-                              className={[
-                                'mt-1 inline-flex rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em] ring-1',
-                                badge === 'BASE'
-                                  ? 'bg-[#4A6B3A]/10 text-[#35502A] ring-[#4A6B3A]/15'
-                                  : badge === 'COCINA CENTRAL'
-                                    ? 'bg-amber-50 text-amber-800 ring-amber-100'
-                                    : 'bg-zinc-100 text-zinc-600 ring-zinc-200',
-                              ].join(' ')}
-                            >
-                              {badge}
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="shrink-0 font-mono text-[13px] font-bold tabular-nums text-zinc-900">
-                          {formatMoneyEur(resolved.totalCost)}
-                        </p>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : (
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="px-4 py-4 text-[12px] text-zinc-400">Sin ingredientes registrados.</p>
+                )
+              ) : centralLines.length > 0 ? (
                 <ul className="divide-y divide-zinc-100">
                   {centralLines.map((line) => (
-                    <li key={line.id} className="flex items-start justify-between gap-3 px-4 py-2.5">
+                    <li
+                      key={line.id}
+                      className="flex items-start justify-between gap-3 px-4 py-2.5"
+                    >
                       <p className="min-w-0 text-[13px] font-semibold text-zinc-900">
-                        <span className="mr-1.5 font-mono text-[12px] font-bold tabular-nums text-zinc-500">
+                        <span className="mr-1.5 font-mono text-[11px] font-bold tabular-nums text-zinc-400">
                           {line.quantity} {line.unit}
                         </span>
                         {line.ingredient_name_snapshot}
@@ -394,137 +483,169 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
                     </li>
                   ))}
                 </ul>
+              ) : (
+                <p className="px-4 py-4 text-[12px] text-zinc-400">Sin ingredientes.</p>
               )}
             </section>
 
-            <section className="mt-3 grid gap-2 sm:grid-cols-3">
-              {[
-                {
-                  label: 'Salida',
-                  value: isEsc
-                    ? sheet?.yieldQuantity && sheet.yieldUnit
-                      ? `${sheet.yieldQuantity} ${sheet.yieldUnit}`
-                      : yieldLabel
-                    : yieldLabel,
-                },
-                { label: 'Merma', value: isEsc ? pctLabel(sheet?.yieldMermaPct) : '—' },
-                {
-                  label: 'Coste salida',
-                  value:
-                    isEsc && sheet?.yieldCostPerUnit != null && sheet.yieldUnit
-                      ? formatUnitPriceEur(sheet.yieldCostPerUnit, sheet.yieldUnit)
-                      : centralCost?.unit != null
-                        ? formatUnitPriceEur(centralCost.unit, isEsc ? 'ud' : props.recipe.final_unit)
-                        : '—',
-                },
-              ].map((item) => (
-                <div key={item.label} className="rounded-2xl bg-white px-3.5 py-3 shadow-sm ring-1 ring-zinc-200/80">
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{item.label}</p>
-                  <p className="mt-1 font-mono text-base font-bold tabular-nums text-zinc-950">{item.value}</p>
-                </div>
-              ))}
-            </section>
+            {/* ── Producción / salida ── */}
+            {(() => {
+              const salida = isEsc
+                ? sheet?.yieldQuantity && sheet.yieldUnit
+                  ? `${sheet.yieldQuantity} ${sheet.yieldUnit}`
+                  : yieldLabel
+                : yieldLabel;
+              const merma = isEsc ? pctLabel(sheet?.yieldMermaPct) : null;
+              const costeSalida =
+                isEsc && sheet?.yieldCostPerUnit != null && sheet.yieldUnit
+                  ? formatUnitPriceEur(sheet.yieldCostPerUnit, sheet.yieldUnit)
+                  : centralCost?.unit != null
+                    ? formatUnitPriceEur(centralCost.unit, isEsc ? 'ud' : props.recipe.final_unit)
+                    : null;
 
+              if (!costeSalida && merma == null) return null;
+
+              return (
+                <section className="mt-3 grid grid-cols-3 gap-2">
+                  <div className="rounded-2xl bg-white px-3 py-3 shadow-sm ring-1 ring-zinc-200/80">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Salida</p>
+                    <p className="mt-1 font-mono text-[0.95rem] font-bold text-zinc-950">{salida}</p>
+                  </div>
+                  {merma ? (
+                    <div className="rounded-2xl bg-white px-3 py-3 shadow-sm ring-1 ring-zinc-200/80">
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Merma</p>
+                      <p className="mt-1 font-mono text-[0.95rem] font-bold text-zinc-950">{merma}</p>
+                    </div>
+                  ) : null}
+                  {costeSalida ? (
+                    <div className="rounded-2xl bg-white px-3 py-3 shadow-sm ring-1 ring-zinc-200/80">
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Coste salida</p>
+                      <p className="mt-1 font-mono text-[0.95rem] font-bold text-zinc-950">{costeSalida}</p>
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })()}
+
+            {/* ── Proceso ── */}
             <section className="mt-3 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/80">
-              <div className="border-b border-zinc-100 bg-zinc-50/70 px-4 py-2.5">
-                <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Proceso</h3>
-              </div>
+              <SectionHeader>Proceso de elaboración</SectionHeader>
               <div className="px-4 py-3">
                 {isEsc ? (
                   steps.length > 0 ? (
                     <ol className="space-y-3">
                       {steps.map((step, i) => (
                         <li key={step.id} className="flex gap-3">
-                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-[#D32F2F] text-[11px] font-bold text-white shadow-sm">
+                          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-[#C4531F] text-[11px] font-bold text-white shadow-sm">
                             {i + 1}
                           </span>
-                          <div className="min-w-0">
-                            {step.titulo ? <p className="text-sm font-semibold text-zinc-900">{step.titulo}</p> : null}
-                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-600">{step.descripcion}</p>
+                          <div className="min-w-0 pt-0.5">
+                            {step.titulo ? (
+                              <p className="text-[13px] font-bold text-zinc-900">{step.titulo}</p>
+                            ) : null}
+                            <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-zinc-600">
+                              {step.descripcion}
+                            </p>
                           </div>
                         </li>
                       ))}
                     </ol>
                   ) : sheet?.notasChef || sheet?.puntosCriticos ? (
-                    <div className="space-y-2 text-sm leading-relaxed text-zinc-600">
+                    <div className="space-y-2 text-[13px] leading-relaxed text-zinc-600">
                       {sheet.notasChef ? <p className="whitespace-pre-wrap">{sheet.notasChef}</p> : null}
-                      {sheet.puntosCriticos ? <p className="whitespace-pre-wrap">{sheet.puntosCriticos}</p> : null}
+                      {sheet.puntosCriticos ? (
+                        <p className="whitespace-pre-wrap">{sheet.puntosCriticos}</p>
+                      ) : null}
                     </div>
                   ) : (
-                    <p className="text-sm text-zinc-500">Sin proceso registrado.</p>
+                    <p className="text-[12px] text-zinc-400">Sin pasos definidos.</p>
                   )
                 ) : props.recipe.procedure_notes ? (
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-600">{props.recipe.procedure_notes}</p>
+                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-zinc-600">
+                    {props.recipe.procedure_notes}
+                  </p>
                 ) : (
-                  <p className="text-sm text-zinc-500">Sin procedimiento registrado.</p>
+                  <p className="text-[12px] text-zinc-400">Sin procedimiento registrado.</p>
                 )}
               </div>
             </section>
 
-            {isEsc && sheet && (sheet.emplatadoDescripcion || sheet.emplatadoDecoracion || sheet.emplatadoMenaje) ? (
+            {/* ── Emplatado ── */}
+            {hasEmplatado ? (
               <section className="mt-3 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/80">
-                <div className="border-b border-zinc-100 bg-zinc-50/70 px-4 py-2.5">
-                  <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Emplatado</h3>
-                </div>
-                <div className="space-y-2 px-4 py-3 text-sm leading-relaxed text-zinc-600">
-                  {sheet.emplatadoDescripcion ? (
+                <SectionHeader>Emplatado</SectionHeader>
+                <div className="space-y-2 px-4 py-3 text-[13px] leading-relaxed text-zinc-600">
+                  {sheet!.emplatadoDescripcion ? (
                     <p>
-                      <span className="font-semibold text-zinc-800">Montaje:</span> {sheet.emplatadoDescripcion}
+                      <span className="font-semibold text-zinc-800">Montaje:</span>{' '}
+                      {sheet!.emplatadoDescripcion}
                     </p>
                   ) : null}
-                  {sheet.emplatadoDecoracion ? (
+                  {sheet!.emplatadoDecoracion ? (
                     <p>
-                      <span className="font-semibold text-zinc-800">Decoración:</span> {sheet.emplatadoDecoracion}
+                      <span className="font-semibold text-zinc-800">Decoración:</span>{' '}
+                      {sheet!.emplatadoDecoracion}
                     </p>
                   ) : null}
-                  {sheet.emplatadoMenaje ? (
+                  {sheet!.emplatadoMenaje ? (
                     <p>
-                      <span className="font-semibold text-zinc-800">Soporte:</span> {sheet.emplatadoMenaje}
+                      <span className="font-semibold text-zinc-800">Soporte:</span>{' '}
+                      {sheet!.emplatadoMenaje}
                     </p>
                   ) : null}
                 </div>
               </section>
             ) : null}
 
+            {/* ── Conservación ── */}
+            {hasConservation ? <ConservationSection sheet={sheet!} /> : null}
+
+            {/* ── Alérgenos ── */}
             {isEsc && allergens.length > 0 ? (
               <section className="mt-3 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-amber-100">
                 <div className="border-b border-amber-100 bg-amber-50/80 px-4 py-2.5">
-                  <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-800">Alérgenos</h3>
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-800">
+                    Alérgenos
+                  </h3>
                 </div>
                 <div className="flex flex-wrap gap-2 px-4 py-3">
                   {allergens.map((row) => (
                     <span
                       key={row.id}
-                      className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-900 ring-1 ring-amber-100"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-900 ring-1 ring-amber-200"
                     >
-                      <AlertTriangle className="h-3.5 w-3.5" />
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                       {row.allergen?.name ?? row.allergen_id}
                     </span>
                   ))}
                 </div>
               </section>
             ) : null}
+
+            {/* Espacio al fondo */}
+            <div className="h-3" />
           </div>
 
-          <footer className="grid grid-cols-3 gap-2 border-t border-zinc-200/80 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] backdrop-blur-sm">
+          {/* ── Footer sticky ── */}
+          <footer className="flex gap-2 border-t border-zinc-200/80 bg-white/95 px-4 pb-[max(0.875rem,env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur-sm">
             {props.editHref ? (
               <Link
                 href={props.editHref}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-200/90 bg-white text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:scale-[0.99]"
+                className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white py-3 text-[13px] font-bold text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:scale-[0.99]"
               >
                 <Edit3 className="h-4 w-4" />
                 Editar
               </Link>
             ) : (
-              <span className="inline-flex h-11 items-center justify-center rounded-2xl border border-zinc-100 bg-zinc-50 text-sm font-semibold text-zinc-400">
+              <div className="flex flex-1 items-center justify-center rounded-2xl border border-zinc-100 bg-zinc-50 py-3 text-[13px] font-semibold text-zinc-300">
                 Editar
-              </span>
+              </div>
             )}
             <button
               type="button"
               onClick={props.onPrint}
               disabled={!props.onPrint}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-zinc-200/90 bg-white text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:scale-[0.99] disabled:opacity-40"
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white py-3 text-[13px] font-bold text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:scale-[0.99] disabled:opacity-40"
             >
               <Printer className="h-4 w-4" />
               Imprimir
@@ -532,7 +653,7 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-11 items-center justify-center rounded-2xl bg-[#D32F2F] text-sm font-semibold text-white shadow-[0_4px_14px_rgba(211,47,47,0.28)] transition hover:bg-[#B91C1C] active:scale-[0.99]"
+              className="flex flex-1 items-center justify-center rounded-2xl bg-[#4A6B3A] py-3 text-[13px] font-bold text-white shadow-[0_4px_14px_rgba(74,107,58,0.25)] transition hover:bg-[#3d5a30] active:scale-[0.99]"
             >
               Cerrar
             </button>
@@ -540,5 +661,33 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
         </section>
       </div>
     </div>
+  );
+}
+
+// Chip inline helper — evita repetir className
+function Chip({
+  children,
+  muted,
+  active,
+}: {
+  children: React.ReactNode;
+  muted?: boolean;
+  active?: boolean;
+}) {
+  if (active) {
+    return (
+      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-100">
+        {children}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`rounded-full bg-white px-2.5 py-1 text-[10px] shadow-sm ring-1 ring-zinc-200/80 ${
+        muted ? 'font-medium tabular-nums text-zinc-500' : 'font-semibold text-zinc-700'
+      }`}
+    >
+      {children}
+    </span>
   );
 }
