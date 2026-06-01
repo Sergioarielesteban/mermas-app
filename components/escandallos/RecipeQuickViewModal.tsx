@@ -677,7 +677,7 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
                       familyComparison={simFamilyComparison}
                       hasIngredients={props.lines.length > 0}
                       readonly
-                      onEditRecipe={props.editHref ? undefined : undefined}
+                      embedded
                     />
                   </div>
                 ) : null}

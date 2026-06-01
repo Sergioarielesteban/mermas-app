@@ -10,6 +10,7 @@ import {
   Pencil,
   RefreshCw,
   Save,
+  TrendingUp,
   Trash2,
 } from 'lucide-react';
 import RecipeTechnicalSheetPanel from '@/components/escandallos/RecipeTechnicalSheetPanel';
@@ -152,6 +153,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const [familyBenchmark, setFamilyBenchmark] = useState<FamilyPriceBenchmark | null>(null);
   const [familyComparison, setFamilyComparison] = useState<FamilyComparison | null>(null);
   const [ingredientsOpen, setIngredientsOpen] = useState(false);
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
   const hydratedRecipeId = useRef<string | null>(null);
   const technicalSheetPanelRef = useRef<RecipeTechnicalSheetPanelHandle | null>(null);
 
@@ -1034,21 +1036,53 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
 
           </article>
 
-          {/* ── Simulador de precio ── */}
+          {/* ── Simulador de precio (acordeón) ── */}
           {!recipe.isSubRecipe ? (
-            <RecipePriceSimulatorPanel
-              totalCostEur={totalCostLive}
-              yieldQty={yLive > 0 ? yLive : 1}
-              vatRatePct={vatLive}
-              currentPvpGrossEur={grossLive ?? recipe.salePriceGrossEur ?? null}
-              familyName={simulatorFamilyName}
-              familyBenchmark={familyBenchmark}
-              familyComparison={familyComparison}
-              hasIngredients={lines.length > 0}
-              demoReadonly={demoReadonly}
-              onApplyRecommendedPvp={(pvp) => setDraftSaleGross(String(pvp))}
-              className="mt-2"
-            />
+            <section className="overflow-hidden rounded-xl border border-[rgba(10,9,8,0.06)] bg-white ring-1 ring-[rgba(10,9,8,0.04)]">
+              <button
+                type="button"
+                onClick={() => setSimulatorOpen((v) => !v)}
+                className="flex min-h-11 w-full items-center gap-2 px-2.5 py-2 text-left transition hover:bg-[#FAFAF9]"
+              >
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[#F7F3EE] text-[#7E7468] ring-1 ring-[rgba(10,9,8,0.06)]">
+                  <TrendingUp className="h-3.5 w-3.5" aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[11px] font-black uppercase tracking-wide text-[#0A0908]">
+                    Precio recomendado
+                  </span>
+                  <span className="block truncate text-[10px] font-medium text-[#7E7468]">
+                    {lines.length === 0
+                      ? 'Añade ingredientes para simular'
+                      : fcPct != null
+                        ? `FC actual ${fcPct.toFixed(1)} % · Objetivo Chef One 30 %`
+                        : 'Simula PVP, food cost y margen'}
+                  </span>
+                </span>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 shrink-0 text-[#7E7468] transition ${simulatorOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {simulatorOpen ? (
+                <div className="border-t border-[rgba(10,9,8,0.06)] px-2.5 py-2.5">
+                  <RecipePriceSimulatorPanel
+                    totalCostEur={totalCostLive}
+                    yieldQty={yLive > 0 ? yLive : 1}
+                    vatRatePct={vatLive}
+                    currentPvpGrossEur={grossLive ?? recipe.salePriceGrossEur ?? null}
+                    familyName={simulatorFamilyName}
+                    familyBenchmark={familyBenchmark}
+                    familyComparison={familyComparison}
+                    hasIngredients={lines.length > 0}
+                    demoReadonly={demoReadonly}
+                    embedded
+                    onApplyRecommendedPvp={(pvp) => {
+                      setDraftSaleGross(String(pvp));
+                    }}
+                  />
+                </div>
+              ) : null}
+            </section>
           ) : null}
 
           <section className="overflow-hidden rounded-xl border border-[rgba(10,9,8,0.06)] bg-white ring-1 ring-[rgba(10,9,8,0.04)]">

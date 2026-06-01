@@ -33,6 +33,8 @@ export type RecipePriceSimulatorPanelProps = {
   hasIngredients: boolean;
   readonly?: boolean;
   demoReadonly?: boolean;
+  /** Oculta la cabecera del panel (usar cuando está dentro de un acordeón externo). */
+  embedded?: boolean;
   onApplyRecommendedPvp?: (pvpGrossEur: number) => void;
   onEditRecipe?: () => void;
   className?: string;
@@ -274,6 +276,7 @@ export default function RecipePriceSimulatorPanel({
   hasIngredients,
   readonly = false,
   demoReadonly = false,
+  embedded = false,
   onApplyRecommendedPvp,
   onEditRecipe,
   className = '',
@@ -320,14 +323,16 @@ export default function RecipePriceSimulatorPanel({
     'h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 font-mono text-[13px] font-bold tabular-nums text-zinc-900 outline-none focus:ring-2 focus:ring-[#4A6B3A]/20 disabled:opacity-50';
 
   return (
-    <div className={`overflow-hidden rounded-2xl bg-[#F7F3EE] ring-1 ring-zinc-200/70 ${className}`}>
-      {/* Cabecera */}
-      <div className="border-b border-zinc-200/60 bg-white px-4 py-3">
-        <p className="font-serif text-[1rem] font-normal leading-tight text-zinc-950">Precio recomendado</p>
-        <p className="mt-0.5 text-[10px] text-zinc-400">
-          Calcula el PVP ideal según coste, food cost y margen objetivo.
-        </p>
-      </div>
+    <div className={`${embedded ? '' : 'overflow-hidden rounded-2xl bg-[#F7F3EE] ring-1 ring-zinc-200/70'} ${className}`}>
+      {/* Cabecera — solo cuando no está embebido en un acordeón externo */}
+      {!embedded ? (
+        <div className="border-b border-zinc-200/60 bg-white px-4 py-3">
+          <p className="font-serif text-[1rem] font-normal leading-tight text-zinc-950">Precio recomendado</p>
+          <p className="mt-0.5 text-[10px] text-zinc-400">
+            Calcula el PVP ideal según coste, food cost y margen objetivo.
+          </p>
+        </div>
+      ) : null}
 
       {disabled ? (
         <div className="px-4 py-6 text-center">
