@@ -155,6 +155,36 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const [ingredientsOpen, setIngredientsOpen] = useState(false);
   const [simulatorOpen, setSimulatorOpen] = useState(false);
   const hydratedRecipeId = useRef<string | null>(null);
+
+  // ── Auto-cierre de acordeones por inactividad (2 min) ─────────────────────
+  const INACTIVITY_MS = 2 * 60 * 1000;
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    inactivityTimerRef.current = setTimeout(() => {
+      setIngredientsOpen(false);
+      setSimulatorOpen(false);
+    }, INACTIVITY_MS);
+  }, [INACTIVITY_MS]);
+
+  // Arranca / actualiza el timer cuando hay un acordeón abierto
+  useEffect(() => {
+    const anyOpen = ingredientsOpen || simulatorOpen;
+    if (!anyOpen) {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      return;
+    }
+    const events = ['mousemove', 'keydown', 'pointerdown', 'touchstart', 'input', 'change', 'scroll'];
+    const handleActivity = () => resetInactivityTimer();
+    events.forEach((ev) => window.addEventListener(ev, handleActivity, { passive: true }));
+    resetInactivityTimer();
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, handleActivity));
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    };
+  }, [ingredientsOpen, simulatorOpen, resetInactivityTimer]);
+  // ──────────────────────────────────────────────────────────────────────────
   const technicalSheetPanelRef = useRef<RecipeTechnicalSheetPanelHandle | null>(null);
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
