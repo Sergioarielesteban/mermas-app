@@ -180,7 +180,7 @@ export default function ResumenPage() {
       productFilter === 'all' ? 'Todos los productos' : products.find((p) => p.id === productFilter)?.name ?? '—';
     const fromLabel = fromDate ? new Date(fromDate + 'T12:00:00').toLocaleDateString('es-ES') : 'Sin límite inicial';
     const toLabel = toDate ? new Date(toDate + 'T12:00:00').toLocaleDateString('es-ES') : 'Sin límite final';
-    downloadMermasReportPdf({
+    void downloadMermasReportPdf({
       rows: filtered,
       products,
       filters: { productLabel, fromLabel, toLabel },
@@ -402,4 +402,3 @@ export default function ResumenPage() {
     </div>
   );
 }
-

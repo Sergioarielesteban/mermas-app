@@ -4,25 +4,108 @@ import { normalizedCostForRecord, topByQuantity, topByValue, topMotives } from '
 import { toBusinessDateKey } from '@/lib/business-day';
 import type { MermaRecord, Product } from '@/lib/types';
 
+type LogoAsset = { dataUrl: string; width: number; height: number };
 type DocWithTable = jsPDF & { lastAutoTable?: { finalY?: number } };
 
 const PDF_BRAND: [number, number, number] = [211, 47, 47];
 const PDF_ZINC_100: [number, number, number] = [244, 244, 245];
+const PDF_ZINC_200: [number, number, number] = [228, 228, 231];
 const PDF_ZINC_400: [number, number, number] = [161, 161, 170];
 const PDF_ZINC_500: [number, number, number] = [113, 113, 122];
 const PDF_ZINC_900: [number, number, number] = [24, 24, 27];
 const PDF_WHITE: [number, number, number] = [255, 255, 255];
+const PDF_RED_SOFT: [number, number, number] = [254, 242, 242];
+const PDF_EMERALD: [number, number, number] = [5, 150, 105];
+const PDF_BORDER: [number, number, number] = [231, 231, 234];
 
-function pdfFooter(doc: jsPDF, page: number, total: number): void {
+const OFFICIAL_CHEF_LOGO_SRC = '/logo-oficial-chef.svg';
+let officialLogoPromise: Promise<LogoAsset | null> | null = null;
+
+async function loadOfficialChefLogo(): Promise<LogoAsset | null> {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return null;
+  if (officialLogoPromise) return officialLogoPromise;
+
+  officialLogoPromise = (async () => {
+    try {
+      const response = await fetch(OFFICIAL_CHEF_LOGO_SRC);
+      const svgText = await response.text();
+      const transparentSvg = svgText.replace(/<rect\b[^>]*fill="#ffffff"[^>]*\/>/gi, '');
+      const img = new Image();
+      const encodedSvg = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(transparentSvg)}`;
+      const loaded = await new Promise<HTMLImageElement | null>((resolve) => {
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = encodedSvg;
+      });
+      if (!loaded || loaded.naturalWidth <= 0 || loaded.naturalHeight <= 0) return null;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 538;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+
+      const sx = (53 / 375) * loaded.naturalWidth;
+      const sy = (154 / 375) * loaded.naturalHeight;
+      const sw = (269 / 375) * loaded.naturalWidth;
+      const sh = (64 / 375) * loaded.naturalHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(loaded, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      return { dataUrl: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height };
+    } catch {
+      return null;
+    }
+  })();
+
+  return officialLogoPromise;
+}
+
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  void loadOfficialChefLogo();
+}
+
+function drawOfficialLogo(doc: jsPDF, logo: LogoAsset | null | undefined, x: number, y: number, w: number): void {
+  if (!logo) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(...PDF_BRAND);
+    doc.text('Chef One', x, y + 13);
+    doc.setTextColor(...PDF_ZINC_900);
+    return;
+  }
+  doc.addImage(logo.dataUrl, 'PNG', x, y, w, (w * logo.height) / logo.width);
+}
+
+function money(value: number): string {
+  return `${value.toFixed(2)} €`;
+}
+
+function card(doc: jsPDF, x: number, y: number, w: number, h: number, accent = false): void {
+  doc.setFillColor(...(accent ? PDF_RED_SOFT : PDF_WHITE));
+  doc.roundedRect(x, y, w, h, 7, 7, 'F');
+  doc.setDrawColor(...(accent ? ([252, 165, 165] as [number, number, number]) : PDF_BORDER));
+  doc.setLineWidth(0.5);
+  doc.roundedRect(x, y, w, h, 7, 7, 'S');
+}
+
+function pdfFooter(doc: jsPDF, page: number, total: number, periodLabel: string): void {
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  doc.setDrawColor(...PDF_ZINC_200);
+  doc.setLineWidth(0.35);
+  doc.line(32, pageH - 32, pageW - 32, pageH - 32);
   doc.setFontSize(7);
   doc.setTextColor(...PDF_ZINC_400);
   doc.text(
-    `Chef-One · ${new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid', dateStyle: 'medium', timeStyle: 'short' })}`,
-    40,
-    555,
+    `Chef One · ${periodLabel} · ${new Date().toLocaleString('es-ES', {
+      timeZone: 'Europe/Madrid',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    })}`,
+    36,
+    pageH - 16,
   );
-  const pageW = doc.internal.pageSize.getWidth();
-  doc.text(`Página ${page} / ${total}`, pageW - 40, 555, { align: 'right' });
+  doc.text(`Página ${page} / ${total}`, pageW - 36, pageH - 16, { align: 'right' });
   doc.setTextColor(...PDF_ZINC_900);
 }
 
@@ -136,41 +219,39 @@ function drawMonthOverMonthBlock(
   doc: jsPDF,
   opts: { x: number; y: number; w: number; data: MermasMonthOverMonth },
 ): number {
-  const pad = 10;
-  /** Más alto para separar texto de mes y cifras. */
-  const boxH = 78;
-  doc.setFillColor(...PDF_ZINC_100);
-  doc.roundedRect(opts.x, opts.y, opts.w, boxH, 4, 4, 'F');
-  doc.setDrawColor(...PDF_ZINC_400);
-  doc.setLineWidth(0.35);
-  doc.roundedRect(opts.x, opts.y, opts.w, boxH, 4, 4, 'S');
+  const pad = 14;
+  const boxH = 76;
+  card(doc, opts.x, opts.y, opts.w, boxH);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(...PDF_ZINC_500);
+  doc.setFontSize(10.5);
+  doc.setTextColor(...PDF_ZINC_900);
   doc.text('Comparativa mes civil (mismo filtro de producto)', opts.x + pad, opts.y + 14);
 
-  const colW = (opts.w - pad * 2 - 8) / 3;
-  const cx2 = opts.x + pad + colW + 4;
-  const cx3 = opts.x + pad + (colW + 4) * 2 - 12;
-  /** Etiquetas de mes / variación; debajo van las cifras con más aire. */
-  const labelY = opts.y + 36;
-  const valueY = opts.y + 56;
+  const colW = (opts.w - pad * 2 - 140) / 3;
+  const cx1 = opts.x + pad;
+  const cx2 = cx1 + colW + 22;
+  const cx3 = cx2 + colW + 22;
+  const labelY = opts.y + 35;
+  const valueY = opts.y + 55;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...PDF_ZINC_500);
-  doc.text(opts.data.prevLabel, opts.x + pad, labelY);
-  doc.setFontSize(14);
+  doc.text(opts.data.prevLabel, cx1, labelY);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
   doc.setTextColor(...PDF_ZINC_900);
-  doc.text(`${opts.data.prevEur.toFixed(2)} €`, opts.x + pad, valueY);
+  doc.text(money(opts.data.prevEur), cx1, valueY);
 
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...PDF_ZINC_500);
   doc.text(opts.data.currLabel, cx2, labelY);
-  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
   doc.setTextColor(...PDF_BRAND);
-  doc.text(`${opts.data.currEur.toFixed(2)} €`, cx2, valueY);
+  doc.text(money(opts.data.currEur), cx2, valueY);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
@@ -185,63 +266,90 @@ function drawMonthOverMonthBlock(
           : '—'
       : `${opts.data.pctVsPrev > 0 ? '+' : ''}${opts.data.pctVsPrev}%`;
   doc.setFontSize(14);
+  const chipColor =
+    opts.data.pctVsPrev != null && opts.data.pctVsPrev < 0
+      ? PDF_EMERALD
+      : opts.data.pctVsPrev != null && opts.data.pctVsPrev > 0
+        ? PDF_BRAND
+        : PDF_ZINC_900;
   if (opts.data.pctVsPrev != null && opts.data.pctVsPrev !== 0) {
-    doc.setTextColor(...(opts.data.pctVsPrev > 0 ? ([220, 38, 38] as [number, number, number]) : ([22, 163, 74] as [number, number, number])));
+    doc.setTextColor(...chipColor);
   } else {
     doc.setTextColor(...PDF_ZINC_900);
   }
   doc.text(pctTxt, cx3, valueY);
 
+  const sparkX = opts.x + opts.w - 116;
+  const sparkY = opts.y + 27;
+  const sparkW = 86;
+  const sparkH = 32;
+  const values = [opts.data.prevEur, opts.data.currEur];
+  const min = Math.min(...values);
+  const max = Math.max(...values, min + 0.01);
+  const p1y = sparkY + sparkH - ((opts.data.prevEur - min) / (max - min)) * sparkH;
+  const p2y = sparkY + sparkH - ((opts.data.currEur - min) / (max - min)) * sparkH;
+  doc.setDrawColor(...PDF_ZINC_200);
+  doc.setLineWidth(0.35);
+  doc.line(sparkX, sparkY + sparkH, sparkX + sparkW, sparkY + sparkH);
+  doc.setDrawColor(...chipColor);
+  doc.setLineWidth(1.4);
+  doc.line(sparkX, p1y, sparkX + sparkW, p2y);
+  doc.setFillColor(...PDF_WHITE);
+  doc.circle(sparkX, p1y, 2.2, 'FD');
+  doc.circle(sparkX + sparkW, p2y, 2.2, 'FD');
+
   doc.setTextColor(...PDF_ZINC_900);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(...PDF_ZINC_400);
-  doc.text('Totales en € con la misma lógica de coste por línea que el panel.', opts.x + pad, opts.y + boxH - 6);
+  doc.text('Totales en € con la misma lógica de coste por línea que el panel.', opts.x + pad, opts.y + boxH - 9);
   doc.setTextColor(...PDF_ZINC_900);
 
-  return opts.y + boxH + 10;
+  return opts.y + boxH + 8;
 }
 
 function drawMotiveCostBars(
   doc: jsPDF,
   opts: { x: number; y: number; w: number; h: number; items: Array<{ label: string; totalCost: number }> },
 ): void {
+  card(doc, opts.x, opts.y, opts.w, opts.h);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...PDF_ZINC_900);
-  doc.text('Coste por motivo', opts.x, opts.y + 11);
+  doc.text('Coste por motivo', opts.x + 12, opts.y + 15);
   if (opts.items.length === 0) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(...PDF_ZINC_500);
-    doc.text('Sin datos.', opts.x, opts.y + 28);
+    doc.text('Sin datos.', opts.x + 12, opts.y + 32);
     doc.setTextColor(...PDF_ZINC_900);
     return;
   }
   const max = Math.max(...opts.items.map((i) => i.totalCost), 0.01);
-  const innerTop = opts.y + 22;
-  const barH = Math.min(18, (opts.h - 28) / opts.items.length);
+  const innerTop = opts.y + 30;
+  const rowH = Math.min(16, (opts.h - 40) / opts.items.length);
   let y = innerTop;
-  const wLab = 124;
+  const wLab = 120;
   for (const it of opts.items) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.setTextColor(...PDF_ZINC_500);
+    doc.setFontSize(7.2);
+    doc.setTextColor(...PDF_ZINC_900);
     const lines = doc.splitTextToSize(it.label, wLab);
-    doc.text(lines, opts.x, y + 8);
-    const rowH = Math.max(barH, lines.length * 7 + 2);
-    const trackX = opts.x + wLab + 6;
-    const trackW = opts.w - wLab - 78;
+    doc.text(lines, opts.x + 12, y + 6.5);
+    const effectiveRowH = Math.max(rowH, lines.length * 7 + 1);
+    const trackX = opts.x + 12 + wLab + 10;
+    const trackY = y + 3;
+    const trackW = opts.w - wLab - 96;
     doc.setFillColor(...PDF_ZINC_100);
-    doc.rect(trackX, y, trackW, rowH, 'F');
-    const fillW = Math.max(1.5, (it.totalCost / max) * trackW);
+    doc.roundedRect(trackX, trackY, trackW, 5, 2.5, 2.5, 'F');
+    const fillW = Math.max(2, (it.totalCost / max) * trackW);
     doc.setFillColor(...PDF_BRAND);
-    doc.rect(trackX, y, fillW, rowH, 'F');
+    doc.roundedRect(trackX, trackY, fillW, 5, 2.5, 2.5, 'F');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(...PDF_ZINC_900);
-    doc.text(`${it.totalCost.toFixed(2)} €`, opts.x + opts.w - 4, y + rowH / 2 + 3, { align: 'right' });
-    y += rowH + 3;
+    doc.text(money(it.totalCost), opts.x + opts.w - 12, y + 7, { align: 'right' });
+    y += effectiveRowH + 3;
     doc.setFont('helvetica', 'normal');
     if (y > opts.y + opts.h - 6) break;
   }
@@ -251,74 +359,84 @@ function drawDailyCostBars(
   doc: jsPDF,
   opts: { x: number; y: number; w: number; h: number; days: Array<{ key: string; cost: number }> },
 ): void {
+  card(doc, opts.x, opts.y, opts.w, opts.h);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(...PDF_ZINC_900);
-  doc.text('Coste diario (€)', opts.x, opts.y + 11);
+  doc.text('Coste diario (€)', opts.x + 12, opts.y + 15);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(...PDF_ZINC_400);
-  doc.text('Una columna por día natural del período filtrado', opts.x, opts.y + 22);
+  doc.text('Una línea por día natural del período filtrado', opts.x + 12, opts.y + 25);
   if (opts.days.length === 0) {
     doc.setFontSize(8);
     doc.setTextColor(...PDF_ZINC_500);
-    doc.text('Sin datos.', opts.x, opts.y + 36);
+    doc.text('Sin datos.', opts.x + 12, opts.y + 40);
     doc.setTextColor(...PDF_ZINC_900);
     return;
   }
   const max = Math.max(...opts.days.map((d) => d.cost), 0.01);
-  const padL = 38;
-  const baseY = opts.y + opts.h - 6;
-  const chartH = opts.h - 48;
-  const innerW = opts.w - padL - 14;
-  const gap = opts.days.length > 35 ? 0.75 : opts.days.length > 20 ? 1 : 1.5;
+  const padL = 42;
+  const baseY = opts.y + opts.h - 20;
+  const chartTop = opts.y + 43;
+  const chartH = baseY - chartTop;
+  const innerW = opts.w - padL - 24;
   const n = opts.days.length;
-  const barW = Math.max(1.75, Math.min(16, (innerW - gap * (n + 1)) / n));
   const axisLeft = opts.x + padL;
-  const chartRight = axisLeft + gap + (barW + gap) * n;
+  const chartRight = axisLeft + innerW;
+  const stepX = n <= 1 ? 0 : innerW / (n - 1);
 
-  doc.setDrawColor(...PDF_ZINC_400);
-  doc.setLineWidth(0.4);
-  doc.line(axisLeft - 4, baseY, chartRight + 6, baseY);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6);
-  doc.setTextColor(...PDF_ZINC_500);
-  doc.text(`${max.toFixed(0)} €`, axisLeft - 36, opts.y + 42);
   doc.setFont('helvetica', 'normal');
-  doc.text('0', axisLeft - 14, baseY + 4);
-
-  let x = axisLeft + gap;
-  for (const d of opts.days) {
-    const bh = (d.cost / max) * chartH;
-    doc.setFillColor(250, 250, 251);
-    doc.rect(x, baseY - chartH, barW, chartH, 'F');
-    if (bh > 0) {
-      doc.setFillColor(...PDF_BRAND);
-      doc.rect(x, baseY - bh, barW, bh, 'F');
-    }
-    doc.setDrawColor(...PDF_ZINC_100);
-    doc.setLineWidth(0.2);
-    doc.rect(x, baseY - chartH, barW, chartH, 'S');
-
-    doc.setDrawColor(...PDF_ZINC_100);
-    x += barW + gap;
+  doc.setFontSize(6);
+  doc.setTextColor(...PDF_ZINC_400);
+  for (let i = 0; i <= 3; i++) {
+    const y = chartTop + (chartH / 3) * i;
+    doc.setDrawColor(...PDF_ZINC_200);
+    doc.setLineWidth(0.25);
+    doc.line(axisLeft, y, chartRight, y);
+    const val = max - (max / 3) * i;
+    doc.text(`${val.toFixed(0)} €`, axisLeft - 28, y + 2.2);
   }
 
-  doc.setDrawColor(...PDF_ZINC_100);
+  const points = opts.days.map((d, i) => ({
+    x: axisLeft + (n <= 1 ? innerW / 2 : stepX * i),
+    y: baseY - (d.cost / max) * chartH,
+    cost: d.cost,
+  }));
+
+  doc.setDrawColor(254, 226, 226);
+  doc.setLineWidth(0.5);
+  for (const p of points) {
+    doc.line(p.x, p.y, p.x, baseY);
+  }
+  doc.setDrawColor(...PDF_BRAND);
+  doc.setLineWidth(1.2);
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1]!;
+    const curr = points[i]!;
+    doc.line(prev.x, prev.y, curr.x, curr.y);
+  }
+  for (const p of points) {
+    if (p.cost <= 0) continue;
+    doc.setDrawColor(...PDF_BRAND);
+    doc.setFillColor(...PDF_WHITE);
+    doc.circle(p.x, p.y, 2, 'FD');
+  }
+
   const labelEvery = n <= 12 ? 1 : n <= 24 ? 2 : n <= 35 ? 3 : Math.ceil(n / 12);
   for (let i = 0; i < n; i++) {
     if (i % labelEvery !== 0 && i !== n - 1) continue;
-    const barX = axisLeft + gap + i * (barW + gap);
     doc.setFontSize(4.75);
     doc.setTextColor(...PDF_ZINC_400);
-    doc.text(formatKeyEs(opts.days[i]!.key), barX + barW / 2, baseY + 9, { align: 'center' });
+    doc.text(formatKeyEs(opts.days[i]!.key), points[i]!.x, baseY + 9, { align: 'center' });
   }
   if (n > 16) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6);
     doc.setTextColor(...PDF_ZINC_500);
-    doc.text(`${n} días · ${formatKeyEs(opts.days[0]!.key)} → ${formatKeyEs(opts.days[n - 1]!.key)}`, axisLeft - 6, opts.y + 34);
+    doc.text(`${n} días · ${formatKeyEs(opts.days[0]!.key)} → ${formatKeyEs(opts.days[n - 1]!.key)}`, opts.x + opts.w - 12, opts.y + 25, {
+      align: 'right',
+    });
   }
   doc.setTextColor(...PDF_ZINC_900);
 }
@@ -329,7 +447,7 @@ export type MermasReportPdfFilters = {
   toLabel: string;
 };
 
-export function downloadMermasReportPdf(input: {
+export async function downloadMermasReportPdf(input: {
   rows: MermaRecord[];
   products: Product[];
   filters: MermasReportPdfFilters;
@@ -339,7 +457,7 @@ export function downloadMermasReportPdf(input: {
   dateRangeKeys?: { from: string | null; to: string | null };
   /** Todas las mermas del local (antes de filtro fecha); necesario para comparar con mes civil anterior */
   allMermas?: MermaRecord[];
-}): void {
+}): Promise<void> {
   const {
     rows,
     products,
@@ -348,29 +466,33 @@ export function downloadMermasReportPdf(input: {
     dateRangeKeys,
     allMermas,
   } = input;
+  const logo = await loadOfficialChefLogo();
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
-  const margin = 40;
+  const margin = 32;
   const contentW = pageW - margin * 2;
 
-  doc.setFillColor(...PDF_BRAND);
-  doc.rect(0, 0, pageW, 14, 'F');
+  doc.setFillColor(...PDF_WHITE);
+  doc.rect(0, 0, pageW, pageH, 'F');
+  drawOfficialLogo(doc, logo, margin + 4, 22, 88);
+  doc.setDrawColor(...PDF_ZINC_200);
+  doc.setLineWidth(0.6);
+  doc.line(margin + 112, 18, margin + 112, 74);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(...PDF_WHITE);
-  doc.text('CHEF-ONE', margin, 10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Mermas y residuos', pageW - margin, 10, { align: 'right' });
+  doc.setFontSize(22);
   doc.setTextColor(...PDF_ZINC_900);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.text('Informe para dirección', margin, 42);
+  doc.text('Informe para dirección', margin + 134, 38);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
+  doc.setFontSize(14);
+  doc.setTextColor(...PDF_ZINC_900);
+  doc.text('Mermas y residuos', margin + 134, 56);
+  doc.setFontSize(8.5);
   doc.setTextColor(...PDF_ZINC_500);
-  doc.text(`Periodo: ${filters.fromLabel} – ${filters.toLabel}`, margin, 60);
+  doc.setFillColor(...PDF_RED_SOFT);
+  doc.roundedRect(margin + 134, 66, 174, 17, 8.5, 8.5, 'F');
+  doc.setTextColor(...PDF_BRAND);
+  doc.text(`Periodo: ${filters.fromLabel} – ${filters.toLabel}`, margin + 144, 77.5);
 
   const priceById = new Map(products.map((p) => [p.id, p.pricePerUnit]));
   const rowCost = (m: MermaRecord) => normalizedCostForRecord(m, priceById.get(m.productId));
@@ -385,39 +507,37 @@ export function downloadMermasReportPdf(input: {
   const motives = topMotives(rowsForAgg, 6);
   const topMotiveEur = motives[0]?.totalCost ?? 0;
   const topMotivePct = totalEur > 0 ? (topMotiveEur / totalEur) * 100 : 0;
-  const topMotiveLine = motives[0]
-    ? `${motives[0].label.length > 20 ? `${motives[0].label.slice(0, 19)}…` : motives[0].label} (${topMotivePct.toFixed(0)}%)`
-    : '—';
+  const topMotiveLine = motives[0] ? `${motives[0].label} · ${topMotivePct.toFixed(0)}%` : '—';
 
-  /** Tras una cabecera más corta (solo título + periodo). */
-  const kpiY = 80;
-  const gap = 8;
+  const kpiY = 98;
+  const gap = 10;
   const nKpi = 6;
   const kpiW = (contentW - (nKpi - 1) * gap) / nKpi;
-  const kpiH = 50;
+  const kpiH = 52;
   const kpis: [string, string][] = [
     ['Registros', String(n)],
-    ['Valor total', `${totalEur.toFixed(2)} €`],
+    ['Valor total', money(totalEur)],
     ['Cantidad (uds)', totalQty.toLocaleString('es-ES', { maximumFractionDigits: 2 })],
-    ['Media / registro', n > 0 ? `${avgEur.toFixed(2)} €` : '—'],
+    ['Media / registro', n > 0 ? money(avgEur) : '—'],
     ['Referencias', String(uniqProducts)],
     ['Motivo principal', topMotiveLine],
   ];
   for (let i = 0; i < nKpi; i++) {
     const x = margin + i * (kpiW + gap);
-    doc.setFillColor(...PDF_ZINC_100);
-    doc.roundedRect(x, kpiY, kpiW, kpiH, 3, 3, 'F');
+    card(doc, x, kpiY, kpiW, kpiH, i === nKpi - 1);
+    doc.setFillColor(...PDF_BRAND);
+    doc.roundedRect(x + 10, kpiY + 11, 3, 30, 1.5, 1.5, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.6);
+    doc.setFontSize(6.4);
     doc.setTextColor(...PDF_ZINC_500);
-    doc.text(kpis[i]![0], x + 8, kpiY + 15);
-    doc.setFontSize(10);
+    doc.text(kpis[i]![0].toUpperCase(), x + 19, kpiY + 17);
+    doc.setFontSize(i === nKpi - 1 ? 9.2 : 13);
     doc.setTextColor(...PDF_ZINC_900);
-    const valLines = doc.splitTextToSize(kpis[i]![1], kpiW - 14);
-    doc.text(valLines, x + 8, kpiY + 32);
+    const valLines = doc.splitTextToSize(kpis[i]![1], kpiW - 25);
+    doc.text(valLines, x + 19, kpiY + 35, { lineHeightFactor: 1.04 });
   }
 
-  let yAfterKpi = kpiY + kpiH + 16;
+  let yAfterKpi = kpiY + kpiH + 10;
 
   const mom =
     allMermas != null
@@ -470,11 +590,13 @@ export function downloadMermasReportPdf(input: {
     const tableGap = 12;
     const colW = (contentW - tableGap) / 2;
 
+    card(doc, margin, tableTitlesY - 14, colW, 116);
+    card(doc, margin + colW + tableGap, tableTitlesY - 14, colW, 116);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(10.5);
     doc.setTextColor(...PDF_ZINC_900);
-    doc.text('Top 5 productos por cantidad total', margin, tableTitlesY);
-    doc.text('Top 5 productos por coste acumulado', margin + colW + tableGap, tableTitlesY);
+    doc.text('Top 5 productos por cantidad total', margin + 12, tableTitlesY);
+    doc.text('Top 5 productos por coste acumulado', margin + colW + tableGap + 12, tableTitlesY);
 
     const topQty = topByQuantity(rows, products, 5);
     const topCost = topByValue(rows, products, 5);
@@ -489,11 +611,22 @@ export function downloadMermasReportPdf(input: {
               p.value.toLocaleString('es-ES', { maximumFractionDigits: 2 }),
             ])
           : [['—', 'Sin datos', '—']],
-      styles: { fontSize: 8, cellPadding: 3.2, textColor: PDF_ZINC_900 },
-      headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE, fontSize: 8 },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      margin: { left: margin },
-      tableWidth: colW,
+      styles: {
+        fontSize: 7.4,
+        cellPadding: { top: 2.7, bottom: 2.7, left: 4, right: 4 },
+        textColor: PDF_ZINC_900,
+        lineColor: PDF_ZINC_200,
+        lineWidth: 0.25,
+      },
+      headStyles: { fillColor: PDF_ZINC_100, textColor: PDF_ZINC_500, fontSize: 7.2, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [252, 252, 253] },
+      columnStyles: {
+        0: { cellWidth: 22, textColor: PDF_BRAND, fontStyle: 'bold' },
+        2: { halign: 'right' },
+      },
+      margin: { left: margin + 10 },
+      tableWidth: colW - 20,
+      theme: 'grid',
     });
     const yLeftDone = (doc as DocWithTable).lastAutoTable?.finalY ?? tableTitlesY + 40;
 
@@ -504,15 +637,26 @@ export function downloadMermasReportPdf(input: {
         topCost.length > 0
           ? topCost.map((p, idx) => [String(idx + 1), p.name, p.value.toFixed(2)])
           : [['—', 'Sin datos', '—']],
-      styles: { fontSize: 8, cellPadding: 3.2, textColor: PDF_ZINC_900 },
-      headStyles: { fillColor: PDF_BRAND, textColor: PDF_WHITE, fontSize: 8 },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      margin: { left: margin + colW + tableGap },
-      tableWidth: colW,
+      styles: {
+        fontSize: 7.4,
+        cellPadding: { top: 2.7, bottom: 2.7, left: 4, right: 4 },
+        textColor: PDF_ZINC_900,
+        lineColor: PDF_ZINC_200,
+        lineWidth: 0.25,
+      },
+      headStyles: { fillColor: PDF_ZINC_100, textColor: PDF_ZINC_500, fontSize: 7.2, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [252, 252, 253] },
+      columnStyles: {
+        0: { cellWidth: 22, textColor: PDF_BRAND, fontStyle: 'bold' },
+        2: { halign: 'right' },
+      },
+      margin: { left: margin + colW + tableGap + 10 },
+      tableWidth: colW - 20,
+      theme: 'grid',
     });
     const yRightDone = (doc as DocWithTable).lastAutoTable?.finalY ?? tableTitlesY + 40;
 
-    yAfterKpi = Math.max(yLeftDone, yRightDone) + 8;
+    yAfterKpi = Math.max(yLeftDone, yRightDone, tableTitlesY + 102) + 8;
 
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(7.5);
@@ -536,7 +680,7 @@ export function downloadMermasReportPdf(input: {
   const totalPages = doc.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p);
-    pdfFooter(doc, p, totalPages);
+    pdfFooter(doc, p, totalPages, `${filters.fromLabel} – ${filters.toLabel}`);
   }
 
   const stamp = new Date().toISOString().slice(0, 10);
