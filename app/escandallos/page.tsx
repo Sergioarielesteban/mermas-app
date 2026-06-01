@@ -1415,6 +1415,13 @@ export default function EscandallosPage() {
           saleGrossEur={quickViewRow.saleGrossEur}
           foodCostPct={quickViewRow.foodCostPct}
           marginPct={quickViewRow.foodCostPct != null ? 100 - quickViewRow.foodCostPct : null}
+          familyName={familyByRecipeId.get(quickViewRecipe.id)?.trim() || null}
+          allDashboardRows={mainRows.map((r) => ({
+            recipeId: r.id,
+            foodCostPct: r.foodCostPct,
+            marginPct: r.foodCostPct != null ? Math.round((100 - r.foodCostPct) * 10) / 10 : null,
+            saleGrossEur: r.saleGrossEur,
+          }))}
         />
       ) : null}
 

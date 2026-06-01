@@ -2,7 +2,15 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ChefHat, Edit3, Printer, X } from 'lucide-react';
+import { AlertTriangle, ChefHat, ChevronDown, Edit3, Printer, X } from 'lucide-react';
+import RecipePriceSimulatorPanel from '@/components/escandallos/RecipePriceSimulatorPanel';
+import {
+  buildFamilyPriceBenchmark,
+  compareRecipeToFamily,
+  type FamilyBenchmarkRow,
+  type FamilyComparison,
+  type FamilyPriceBenchmark,
+} from '@/lib/escandallo-price-simulator';
 import { fetchRecipeAllergensForLocal, type RecipeAllergenRow } from '@/lib/appcc-allergens-supabase';
 import type { EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
 import {
@@ -43,6 +51,10 @@ type EscandalloPayload = {
   saleGrossEur?: number | null;
   foodCostPct?: number | null;
   marginPct?: number | null;
+  /** Familia carta del plato (de escandallo_technical_sheets.categoria). */
+  familyName?: string | null;
+  /** Todas las rows de platos del local (para calcular benchmark). */
+  allDashboardRows?: FamilyBenchmarkRow[];
 };
 
 type CentralPayload = {
@@ -196,6 +208,7 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
   const [centralLines, setCentralLines] = useState<ProductionRecipeLineRow[]>([]);
   const [centralCost, setCentralCost] = useState<{ total: number; unit: number | null } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
 
   useEffect(() => {
     if (!open || !localId || !supabase) return;
@@ -264,6 +277,32 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
   if (!open) return null;
 
   const isEsc = props.mode === 'escandallo';
+
+  // ── Benchmark familiar para el simulador ──────────────────────────────────
+  const simFamilyName =
+    isEsc && !props.recipe.isSubRecipe ? (props.familyName?.trim() || null) : null;
+
+  const simBenchmarkRows: FamilyBenchmarkRow[] = isEsc ? (props.allDashboardRows ?? []) : [];
+
+  const simFamilyBenchmark: FamilyPriceBenchmark | null = simFamilyName && simBenchmarkRows.length > 0
+    ? buildFamilyPriceBenchmark({
+        familyName: simFamilyName,
+        rows: simBenchmarkRows,
+        excludeRecipeId: props.recipe.id,
+        minSampleWithFc: 3,
+      })
+    : null;
+
+  const simFamilyComparison: FamilyComparison | null =
+    simFamilyBenchmark?.sufficient && isEsc
+      ? compareRecipeToFamily({
+          foodCostPct: props.foodCostPct ?? null,
+          marginPct: props.marginPct ?? null,
+          pvpGrossEur: props.saleGrossEur ?? null,
+          benchmark: simFamilyBenchmark,
+        })
+      : null;
+  // ──────────────────────────────────────────────────────────────────────────
   const title = props.recipe.name;
   const updatedAt = isEsc ? props.recipe.updatedAt : props.recipe.updated_at;
   const photoUrl = isEsc ? getOfficialRecipePhotoUrl(sheet) : null;
@@ -605,6 +644,43 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
                     </span>
                   ))}
                 </div>
+              </section>
+            ) : null}
+
+            {/* ── Simulador precio recomendado (solo platos) ── */}
+            {isEsc && !props.recipe.isSubRecipe ? (
+              <section className="mt-3 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+                <button
+                  type="button"
+                  onClick={() => setSimulatorOpen((v) => !v)}
+                  className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition hover:bg-zinc-50/60"
+                >
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">Precio recomendado</p>
+                    <p className="mt-0.5 text-[11px] text-zinc-500">Simula PVP, food cost y margen</p>
+                  </div>
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${simulatorOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {simulatorOpen ? (
+                  <div className="border-t border-zinc-100 px-3 pb-3 pt-2">
+                    <RecipePriceSimulatorPanel
+                      totalCostEur={props.costPerYieldEur != null && props.recipe.yieldQty > 0
+                        ? props.costPerYieldEur * props.recipe.yieldQty
+                        : 0}
+                      yieldQty={props.recipe.yieldQty > 0 ? props.recipe.yieldQty : 1}
+                      vatRatePct={props.recipe.saleVatRatePct ?? 10}
+                      currentPvpGrossEur={props.saleGrossEur ?? null}
+                      familyName={simFamilyName}
+                      familyBenchmark={simFamilyBenchmark}
+                      familyComparison={simFamilyComparison}
+                      hasIngredients={props.lines.length > 0}
+                      readonly
+                      onEditRecipe={props.editHref ? undefined : undefined}
+                    />
+                  </div>
+                ) : null}
               </section>
             ) : null}
 

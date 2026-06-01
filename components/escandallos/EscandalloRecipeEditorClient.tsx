@@ -71,6 +71,15 @@ import { recalculateRecipeCost, resolveEscandalloLineCost } from '@/lib/escandal
 import { formatMoneyEur, formatUnitPriceEur } from '@/lib/money-format';
 import { rawIngredientWeightDetail, totalInputWeightKg } from '@/lib/escandallo-input-weight';
 import { fetchCentralKitchenPublicCatalog, type EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
+import RecipePriceSimulatorPanel from '@/components/escandallos/RecipePriceSimulatorPanel';
+import {
+  buildFamilyPriceBenchmark,
+  compareRecipeToFamily,
+  type FamilyBenchmarkRow,
+  type FamilyComparison,
+  type FamilyPriceBenchmark,
+} from '@/lib/escandallo-price-simulator';
+import { buildEscandalloDashboardRows } from '@/lib/escandallos-analytics';
 
 type RecipeTechBundle = {
   sheet: EscandalloTechnicalSheet | null;
@@ -140,6 +149,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const [technicalSheetsByRecipe, setTechnicalSheetsByRecipe] = useState<Map<string, EscandalloTechnicalSheet>>(new Map());
   const [recipeAllergens, setRecipeAllergens] = useState<RecipeAllergenRow[]>([]);
   const [familyOptions, setFamilyOptions] = useState<string[]>([]);
+  const [familyBenchmark, setFamilyBenchmark] = useState<FamilyPriceBenchmark | null>(null);
+  const [familyComparison, setFamilyComparison] = useState<FamilyComparison | null>(null);
   const [ingredientsOpen, setIngredientsOpen] = useState(false);
   const hydratedRecipeId = useRef<string | null>(null);
   const technicalSheetPanelRef = useRef<RecipeTechnicalSheetPanelHandle | null>(null);
@@ -449,6 +460,60 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const fcPct =
     recipe && !recipe.isSubRecipe ? foodCostPercentOfNetSale(totalCostLive, yLive > 0 ? yLive : 1, netSale) : null;
   const marginPct = fcPct != null ? Math.round((100 - fcPct) * 10) / 10 : null;
+
+  // ── Simulador: benchmark familiar ──────────────────────────────────────────
+  const simulatorFamilyName =
+    recipe && !recipe.isSubRecipe ? (draftFamilyName.trim() || null) : null;
+
+  const simulatorBenchmarkRows = useMemo<FamilyBenchmarkRow[]>(() => {
+    if (!simulatorFamilyName || !recipe) return [];
+    const dashRows = buildEscandalloDashboardRows(
+      recipes,
+      linesByRecipe,
+      rawById,
+      processedById,
+      technicalSheetsByRecipe,
+      centralKitchenById,
+    );
+    return dashRows
+      .filter((r) => !r.isSubRecipe)
+      .map((r) => ({
+        recipeId: r.id,
+        foodCostPct: r.foodCostPct,
+        marginPct: r.foodCostPct != null ? Math.round((100 - r.foodCostPct) * 10) / 10 : null,
+        saleGrossEur: r.saleGrossEur,
+      }));
+  }, [simulatorFamilyName, recipe, recipes, linesByRecipe, rawById, processedById, technicalSheetsByRecipe, centralKitchenById]);
+
+  // Recalcular benchmark cuando cambia la familia o las rows
+  // Separado en un effect para no bloquear renders críticos
+  React.useEffect(() => {
+    if (!simulatorFamilyName || !recipe || simulatorBenchmarkRows.length === 0) {
+      setFamilyBenchmark(null);
+      setFamilyComparison(null);
+      return;
+    }
+    const bench = buildFamilyPriceBenchmark({
+      familyName: simulatorFamilyName,
+      rows: simulatorBenchmarkRows,
+      excludeRecipeId: recipe.id,
+      minSampleWithFc: 3,
+    });
+    setFamilyBenchmark(bench);
+    if (bench.sufficient) {
+      const comp = compareRecipeToFamily({
+        foodCostPct: fcPct,
+        marginPct,
+        pvpGrossEur: grossLive,
+        benchmark: bench,
+      });
+      setFamilyComparison(comp);
+    } else {
+      setFamilyComparison(null);
+    }
+  }, [simulatorFamilyName, simulatorBenchmarkRows, recipe, fcPct, marginPct, grossLive]);
+  // ─────────────────────────────────────────────────────────────────────────
+
   const printableRecipe = useMemo(() => {
     if (!recipe) return null;
     const finalWeight = finalWeightLive != null && finalWeightLive > 0 ? finalWeightLive : recipe.finalWeightQty;
@@ -968,6 +1033,23 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
             </div>
 
           </article>
+
+          {/* ── Simulador de precio ── */}
+          {!recipe.isSubRecipe ? (
+            <RecipePriceSimulatorPanel
+              totalCostEur={totalCostLive}
+              yieldQty={yLive > 0 ? yLive : 1}
+              vatRatePct={vatLive}
+              currentPvpGrossEur={grossLive ?? recipe.salePriceGrossEur ?? null}
+              familyName={simulatorFamilyName}
+              familyBenchmark={familyBenchmark}
+              familyComparison={familyComparison}
+              hasIngredients={lines.length > 0}
+              demoReadonly={demoReadonly}
+              onApplyRecommendedPvp={(pvp) => setDraftSaleGross(String(pvp))}
+              className="mt-2"
+            />
+          ) : null}
 
           <section className="overflow-hidden rounded-xl border border-[rgba(10,9,8,0.06)] bg-white ring-1 ring-[rgba(10,9,8,0.04)]">
             <button
