@@ -174,33 +174,11 @@ function ConservationSection({ sheet }: { sheet: EscandalloTechnicalSheet }) {
   );
 }
 
-function PhotoBlock({
-  photoUrl,
-  alt,
-  className,
-}: {
-  photoUrl: string | null;
-  alt: string;
-  className?: string;
-}) {
-  if (photoUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={photoUrl}
-        alt={alt}
-        loading="lazy"
-        className={className}
-        style={{ objectFit: 'contain' }}
-      />
-    );
-  }
+function PhotoPlaceholder() {
   return (
-    <div className="grid h-full w-full place-items-center">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <ChefHat className="h-9 w-9 text-zinc-300" strokeWidth={1.5} />
-        <p className="text-[10px] font-medium text-zinc-400">Sin foto de emplatado</p>
-      </div>
+    <div className="flex min-h-[140px] flex-col items-center justify-center gap-2 py-8 text-center">
+      <ChefHat className="h-9 w-9 text-zinc-300" strokeWidth={1.5} />
+      <p className="text-[10px] font-medium text-zinc-400">Sin foto de emplatado</p>
     </div>
   );
 }
@@ -326,7 +304,7 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
         <section className="flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-[2rem] bg-[#F7F3EE] shadow-[0_-8px_60px_rgba(0,0,0,0.18)] sm:max-h-[90vh] sm:max-w-2xl sm:rounded-[2rem] sm:shadow-[0_24px_80px_rgba(0,0,0,0.2)]">
 
           {/* ── Cabecera ── */}
-          <header className="relative overflow-hidden bg-gradient-to-b from-white to-[#F7F3EE]">
+          <header className="relative bg-gradient-to-b from-white to-[#F7F3EE]">
             {/* Cierre */}
             <button
               type="button"
@@ -339,15 +317,19 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
 
             {/* Móvil: foto arriba centrada, texto debajo */}
             <div className="px-4 pb-3 pt-4 sm:hidden">
-              {/* Foto — contenedor adaptable, sin altura fija que fuerce recorte */}
-              <div className="overflow-hidden rounded-[1.25rem] bg-white shadow-[0_6px_24px_rgba(0,0,0,0.07)] ring-1 ring-zinc-200/70">
-                <div className="flex max-h-[72vw] min-h-[48vw] items-center justify-center p-2">
-                  <PhotoBlock
-                    photoUrl={photoUrl}
+              {/* Foto — altura máxima en la propia img; sin overflow-hidden que recorte */}
+              <div className="rounded-[1.25rem] bg-[#F7F3EE] p-3 shadow-[0_6px_24px_rgba(0,0,0,0.07)] ring-1 ring-zinc-200/70">
+                {photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photoUrl}
                     alt={title}
-                    className="max-h-full max-w-full rounded-xl"
+                    loading="lazy"
+                    className="mx-auto block h-auto w-full max-h-[min(52dvh,480px)] object-contain object-center"
                   />
-                </div>
+                ) : (
+                  <PhotoPlaceholder />
+                )}
               </div>
               <div className="mt-3 pr-8">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
@@ -367,14 +349,18 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
 
             {/* Desktop: foto lateral cuadrada + datos */}
             <div className="relative hidden gap-5 p-5 sm:grid sm:grid-cols-[11rem_1fr]">
-              <div className="aspect-square w-44 overflow-hidden rounded-[1.25rem] bg-white shadow-[0_8px_28px_rgba(0,0,0,0.08)] ring-1 ring-zinc-200/70">
-                <div className="flex h-full w-full items-center justify-center p-2">
-                  <PhotoBlock
-                    photoUrl={photoUrl}
+              <div className="flex w-44 items-center justify-center rounded-[1.25rem] bg-[#F7F3EE] p-2 shadow-[0_8px_28px_rgba(0,0,0,0.08)] ring-1 ring-zinc-200/70">
+                {photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photoUrl}
                     alt={title}
-                    className="max-h-full max-w-full rounded-xl"
+                    loading="lazy"
+                    className="mx-auto block h-auto w-full max-h-44 object-contain object-center"
                   />
-                </div>
+                ) : (
+                  <PhotoPlaceholder />
+                )}
               </div>
               <div className="min-w-0 pr-10">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
