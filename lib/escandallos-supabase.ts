@@ -398,6 +398,55 @@ export async function fetchEscandalloLines(
   return ((data ?? []) as LineRow[]).map(mapLine);
 }
 
+/**
+ * Carga todas las líneas de escandallo para un local en una sola query.
+ * Devuelve un mapa recipeId → líneas, listo para pasarle al motor de costes.
+ * Necesario para el recálculo masivo (evita N queries por receta).
+ */
+export async function fetchAllEscandalloLinesForLocal(
+  supabase: SupabaseClient,
+  localId: string,
+): Promise<Record<string, EscandalloLine[]>> {
+  const selectFull =
+    'id,local_id,recipe_id,source_type,raw_supplier_product_id,article_id,usage_format_id,processed_product_id,sub_recipe_id,central_production_recipe_id,label,qty,unit,manual_price_per_unit,unit_cost,total_cost,sub_recipe_usage_mode,sub_recipe_operational_quantity,sub_recipe_operational_unit,sort_order,created_at';
+  const selectLegacy =
+    'id,local_id,recipe_id,source_type,raw_supplier_product_id,processed_product_id,sub_recipe_id,label,qty,unit,manual_price_per_unit,sort_order,created_at';
+  const { data, error } = await supabase
+    .from('escandallo_recipe_lines')
+    .select(selectFull)
+    .eq('local_id', localId)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true });
+  const rows: LineRow[] = error
+    ? (() => {
+        return [];
+      })()
+    : ((data ?? []) as LineRow[]);
+
+  if (error) {
+    const legacy = await supabase
+      .from('escandallo_recipe_lines')
+      .select(selectLegacy)
+      .eq('local_id', localId)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (legacy.error) throw new Error(legacy.error.message);
+    const byRecipe: Record<string, EscandalloLine[]> = {};
+    for (const row of (legacy.data ?? []) as LineRow[]) {
+      const line = mapLine(row);
+      (byRecipe[line.recipeId] ??= []).push(line);
+    }
+    return byRecipe;
+  }
+
+  const byRecipe: Record<string, EscandalloLine[]> = {};
+  for (const row of rows) {
+    const line = mapLine(row);
+    (byRecipe[line.recipeId] ??= []).push(line);
+  }
+  return byRecipe;
+}
+
 export async function fetchProductsForEscandallo(
   supabase: SupabaseClient,
   localId: string,

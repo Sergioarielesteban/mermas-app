@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ClipboardList,
   ChevronDown,
+  Pencil,
   RefreshCw,
   Save,
   Trash2,
@@ -15,6 +16,7 @@ import RecipeTechnicalSheetPanel from '@/components/escandallos/RecipeTechnicalS
 import type { RecipeTechnicalSheetPanelHandle } from '@/components/escandallos/RecipeTechnicalSheetPanel';
 import RecipePrintPDFButton from '@/components/escandallos/RecipePrintPDF';
 import EscandalloIngredientDraftEditor from '@/components/escandallos/EscandalloIngredientDraftEditor';
+import EditIngredientLineModal, { type EditIngredientLinePatch } from '@/components/escandallos/EditIngredientLineModal';
 import { useAuth } from '@/components/AuthProvider';
 import { fetchRecipeAllergens, type RecipeAllergenRow } from '@/lib/appcc-allergens-supabase';
 import { appConfirm } from '@/lib/app-dialog-bridge';
@@ -57,12 +59,14 @@ import {
   saleNetPerUnitFromGross,
   effectiveRecipeYieldQtyForCost,
   subrecipeLineUsesOperationalPortion,
+  updateEscandalloLine,
   updateEscandalloRecipe,
   type EscandalloLine,
   type EscandalloProcessedProduct,
   type EscandalloRawProduct,
   type EscandalloRecipe,
 } from '@/lib/escandallos-supabase';
+import { markRecipesCostDirty } from '@/lib/escandallos-cost-recalculation';
 import { recalculateRecipeCost, resolveEscandalloLineCost } from '@/lib/escandallos-cost-engine';
 import { formatMoneyEur, formatUnitPriceEur } from '@/lib/money-format';
 import { rawIngredientWeightDetail, totalInputWeightKg } from '@/lib/escandallo-input-weight';
@@ -118,6 +122,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
   const [banner, setBanner] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [editingLine, setEditingLine] = useState<EscandalloLine | null>(null);
 
   const [draftRecipeName, setDraftRecipeName] = useState('');
   const [draftRecipeNotes, setDraftRecipeNotes] = useState('');
@@ -651,6 +656,37 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     }
   };
 
+  const handleSaveLineEdit = async (patch: EditIngredientLinePatch) => {
+    if (!localId || !recipe || !editingLine || demoReadonly) return;
+    const supabase = getSupabaseClient()!;
+    const lineId = editingLine.id;
+    setBusyId(lineId);
+    try {
+      // 1. Actualizar la línea (nunca borrar y recrear)
+      await updateEscandalloLine(supabase, localId, lineId, patch);
+
+      // 2. Refrescar líneas en UI
+      await refreshRecipeLines(recipe.id);
+
+      // 3. Si la receta es una base, marcar platos dependientes como dirty
+      if (recipe.isSubRecipe && supabaseOk) {
+        void markRecipesCostDirty(supabase, {
+          localId,
+          source: { type: 'subrecipe', recipeId: recipe.id },
+          reason: `Línea editada en base "${recipe.name}"`,
+        }).catch(() => { /* no bloquear UI si falla la cola */ });
+      }
+
+      setEditingLine(null);
+      setSuccessMsg('Ingrediente actualizado.');
+      window.setTimeout(() => setSuccessMsg(null), 2800);
+    } catch (e: unknown) {
+      throw e instanceof Error ? e : new Error('No se pudo actualizar la línea.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const sortedLines = useMemo(
     () => [...lines].sort((a, b) => a.sortOrder - b.sortOrder),
     [lines],
@@ -1042,15 +1078,26 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                               <p className="text-[13px] font-black tabular-nums leading-none text-[#0A0908]">
                                 {formatMoneyEur(lineCost)}
                               </p>
-                              <button
-                                type="button"
-                                disabled={busyId === line.id || demoReadonly}
-                                onClick={() => void handleDeleteLine(line.id)}
-                                className="grid h-6 w-6 place-items-center rounded-md text-[#D32F2F] transition hover:bg-[#D32F2F]/10 disabled:opacity-40"
-                                aria-label="Eliminar ingrediente"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={busyId === line.id || demoReadonly}
+                                  onClick={() => setEditingLine(line)}
+                                  className="grid h-6 w-6 place-items-center rounded-md text-[#4A6B3A] transition hover:bg-[#4A6B3A]/10 disabled:opacity-40"
+                                  aria-label="Editar ingrediente"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={busyId === line.id || demoReadonly}
+                                  onClick={() => void handleDeleteLine(line.id)}
+                                  className="grid h-6 w-6 place-items-center rounded-md text-[#D32F2F] transition hover:bg-[#D32F2F]/10 disabled:opacity-40"
+                                  aria-label="Eliminar ingrediente"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </li>
@@ -1176,6 +1223,22 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
 
         </>
       )}
+
+      {/* Modal edición de línea */}
+      {editingLine ? (
+        <EditIngredientLineModal
+          line={editingLine}
+          rawProductById={rawById}
+          processedById={processedById}
+          centralKitchenById={centralKitchenById}
+          technicalSheetsByRecipe={technicalSheetsByRecipe}
+          recipesById={recipesById}
+          linesByRecipe={linesByRecipe}
+          busy={busyId === editingLine.id}
+          onSave={handleSaveLineEdit}
+          onClose={() => setEditingLine(null)}
+        />
+      ) : null}
     </div>
   );
 }
