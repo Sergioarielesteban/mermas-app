@@ -11,6 +11,7 @@ import {
   Calculator,
   ChevronRight,
   Eye,
+  FileDown,
   MoreHorizontal,
   PencilLine,
   Plus,
@@ -45,6 +46,7 @@ import {
 import { printRecipePDF, type RecipePrintPayload } from '@/lib/escandallo-recipe-print-pdf';
 import {
   fetchAllEscandalloLinesForLocal,
+  fetchEscandalloMonthlySales,
   fetchEscandalloRecipes,
   fetchEscandalloRawProductsWithWeightedPurchasePrices,
   fetchProcessedProductsForEscandallo,
@@ -57,6 +59,12 @@ import {
 import { fetchEscandalloRecipeCategoriasMap } from '@/lib/finanzas-rentabilidad-escandallo';
 import { formatMoneyEur } from '@/lib/money-format';
 import { fetchCentralKitchenPublicCatalog, type EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
+import {
+  buildExecutiveProfitabilityReportData,
+  type ExecutiveReportSourceRow,
+  recentYearMonths,
+} from '@/lib/rentabilidad-executive-report-data';
+import { downloadExecutiveProfitabilityReportPdf } from '@/pdf/rentabilidad-executive-report-pdf';
 
 type RecipeFilter = 'all' | 'plates' | 'bases' | 'high' | 'incomplete';
 
@@ -503,7 +511,7 @@ function RecipeCard({
 
 export default function EscandallosPage() {
   const searchParams = useSearchParams();
-  const { localId, profileReady } = useAuth();
+  const { localId, localName, profileReady } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
   const [recipes, setRecipes] = useState<EscandalloRecipe[]>([]);
   const [linesByRecipe, setLinesByRecipe] = useState<Record<string, EscandalloLine[]>>({});
@@ -514,6 +522,7 @@ export default function EscandallosPage() {
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [printingRecipeId, setPrintingRecipeId] = useState<string | null>(null);
+  const [executiveReportBusy, setExecutiveReportBusy] = useState(false);
   const [quickViewRecipeId, setQuickViewRecipeId] = useState<string | null>(null);
   const [quickCalcOpen, setQuickCalcOpen] = useState(false);
   const [baseBusyId, setBaseBusyId] = useState<string | null>(null);
@@ -676,6 +685,24 @@ export default function EscandallosPage() {
     [recipes, linesByRecipe, rawById, processedById, technicalSheetsByRecipe, centralKitchenById],
   );
   const mainRows = useMemo(() => rows.filter((r) => !r.isSubRecipe), [rows]);
+  const executiveReportRows = useMemo<ExecutiveReportSourceRow[]>(
+    () =>
+      rows.map((row) => ({
+        recipeId: row.id,
+        name: row.name,
+        family: familyByRecipeId.get(row.id)?.trim() || null,
+        isSubRecipe: row.isSubRecipe,
+        yieldQty: row.yieldQty,
+        costTotalEur: row.totalCostEur,
+        costPerYieldEur: row.costPerYieldEur,
+        pvpGrossEur: row.saleGrossEur,
+        saleNetEur: row.saleNetEur,
+        foodCostPct: row.foodCostPct,
+        marginPct: row.foodCostPct != null ? Math.round((100 - row.foodCostPct) * 10) / 10 : null,
+        lineCount: row.lineCount,
+      })),
+    [rows, familyByRecipeId],
+  );
   const subRows = useMemo(() => rows.filter((r) => r.isSubRecipe), [rows]);
   const familyOptions = useMemo(() => {
     const families = [...new Set(mainRows.map((row) => familyByRecipeId.get(row.id)?.trim() || 'Sin familia'))].sort((a, b) =>
@@ -835,6 +862,55 @@ export default function EscandallosPage() {
     [centralKitchenById, linesByRecipe, localId, processedById, rawById, recipesById, rows],
   );
 
+  const handleDownloadExecutiveReport = useCallback(async () => {
+    if (!localId || executiveReportBusy) return;
+    setExecutiveReportBusy(true);
+    setBanner(null);
+    try {
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      const months = recentYearMonths(12);
+      const evolutionQuantityByMonth = await (async () => {
+        if (isDemoMode()) {
+          return months.map((month, index) => {
+            const factor = 0.72 + index * 0.04;
+            const quantityByRecipeId: Record<string, number> = {};
+            for (const row of mainRows) {
+              quantityByRecipeId[row.id] = Math.round((80 + index * 8) * factor);
+            }
+            return { label: month, quantityByRecipeId };
+          });
+        }
+        const supabase = getSupabaseClient();
+        if (!supabase) return [];
+        return Promise.all(
+          months.map(async (month) => {
+            const sales = await fetchEscandalloMonthlySales(supabase, localId, month).catch(() => []);
+            const quantityByRecipeId: Record<string, number> = {};
+            for (const sale of sales) {
+              quantityByRecipeId[sale.recipeId] = (quantityByRecipeId[sale.recipeId] ?? 0) + sale.quantitySold;
+            }
+            return { label: month, quantityByRecipeId };
+          }),
+        );
+      })();
+      const quantityByRecipeId = evolutionQuantityByMonth.find((point) => point.label === currentMonth)?.quantityByRecipeId ?? {};
+      const report = buildExecutiveProfitabilityReportData({
+        localName,
+        period: { label: `Escandallos · ${currentMonth}`, yearMonth: currentMonth },
+        rows: executiveReportRows,
+        linesByRecipe,
+        rawById,
+        quantityByRecipeId,
+        evolutionQuantityByMonth,
+      });
+      await downloadExecutiveProfitabilityReportPdf(report);
+    } catch (error: unknown) {
+      setBanner(error instanceof Error ? error.message : 'No se pudo generar el informe ejecutivo.');
+    } finally {
+      setExecutiveReportBusy(false);
+    }
+  }, [executiveReportBusy, executiveReportRows, linesByRecipe, localId, localName, mainRows, rawById]);
+
   const handleDeleteBase = async (base: EscandalloRecipeDashboardRow) => {
     const usageCount = baseUsageById.get(base.id) ?? 0;
     setDeleteConfirmBase({ base, usageCount });
@@ -907,6 +983,15 @@ export default function EscandallosPage() {
         >
           <Calculator className="h-4 w-4" />
           Calculadora rápida
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleDownloadExecutiveReport()}
+          disabled={loading || executiveReportBusy || mainRows.length === 0}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#C4531F]/20 bg-white px-4 py-3 text-sm font-bold text-[#C4531F] shadow-sm transition hover:bg-[#FFF7ED] disabled:opacity-50 sm:w-auto"
+        >
+          <FileDown className="h-4 w-4" />
+          {executiveReportBusy ? 'Generando informe…' : 'Informe ejecutivo'}
         </button>
         <Link
           href="/escandallos/recetas/nuevo"
