@@ -44,7 +44,7 @@ import {
 } from '@/lib/escandallos-technical-sheet-supabase';
 import { printRecipePDF, type RecipePrintPayload } from '@/lib/escandallo-recipe-print-pdf';
 import {
-  fetchEscandalloLines,
+  fetchAllEscandalloLinesForLocal,
   fetchEscandalloRecipes,
   fetchEscandalloRawProductsWithWeightedPurchasePrices,
   fetchProcessedProductsForEscandallo,
@@ -608,8 +608,8 @@ export default function EscandallosPage() {
       setCentralKitchenProducts(centralCatalog);
       setTechnicalSheetsByRecipe(sheetsMapResult);
       setFamilyByRecipeId(categoryMap);
-      const linesEntries = await Promise.all(r.map(async (recipe) => [recipe.id, await fetchEscandalloLines(supabase, localId, recipe.id)] as const));
-      setLinesByRecipe(Object.fromEntries(linesEntries));
+      const allLines = await fetchAllEscandalloLinesForLocal(supabase, localId);
+      setLinesByRecipe(allLines);
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'No se pudieron cargar datos. Revisa conexión y migraciones de escandallos.');
       setRecipes([]);

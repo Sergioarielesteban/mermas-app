@@ -51,6 +51,7 @@ import {
 import {
   deleteEscandalloLine,
   deleteEscandalloRecipe,
+  fetchAllEscandalloLinesForLocal,
   fetchEscandalloLines,
   fetchEscandalloRecipes,
   fetchProcessedProductsForEscandallo,
@@ -336,13 +337,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
         ),
       );
       setTechnicalSheetsByRecipe(sheetsMapResult);
-      const linesEntries = await Promise.all(
-        r.map(async (rec) => {
-          const ls = await fetchEscandalloLines(supabase, localId, rec.id);
-          return [rec.id, ls] as const;
-        }),
-      );
-      setLinesByRecipe(Object.fromEntries(linesEntries));
+      const allLines = await fetchAllEscandalloLinesForLocal(supabase, localId);
+      setLinesByRecipe(allLines);
       catalogHydratedRef.current = true;
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'No se pudieron cargar los datos.');
