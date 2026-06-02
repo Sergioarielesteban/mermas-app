@@ -25,6 +25,7 @@ import { formatMoneyEur } from '@/lib/money-format';
 import type { EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
 
 type RGB = [number, number, number];
+type LogoAsset = { dataUrl: string; width: number; height: number };
 type PhotoAsset = { dataUrl: string; aspect: number };
 
 export type RecipePrintPayload = {
@@ -53,7 +54,6 @@ const FOOTER_TOP = 784;
 const SAFE_B = FOOTER_TOP - 12;
 
 const WHITE: RGB = [255, 255, 255];
-const PAPER: RGB = [252, 251, 249];
 const NAVY: RGB = [13, 24, 44];
 const MUTED: RGB = [96, 104, 116];
 const BORDER: RGB = [224, 224, 220];
@@ -291,6 +291,40 @@ async function loadPhoto(src: string | null | undefined, targetAspect: number): 
   }
 }
 
+let chefOneLogoPromise: Promise<LogoAsset | null> | null = null;
+
+async function loadChefOneLogo(): Promise<LogoAsset | null> {
+  if (typeof document === 'undefined') return null;
+  if (chefOneLogoPromise) return chefOneLogoPromise;
+  chefOneLogoPromise = (async () => {
+    try {
+      const res = await fetch('/logo-chef-one-menu.svg');
+      if (!res.ok) return null;
+      const svg = await res.text();
+      const img = new Image();
+      const encoded = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      const loaded = await new Promise<HTMLImageElement | null>((ok) => {
+        img.onload = () => ok(img);
+        img.onerror = () => ok(null);
+        img.src = encoded;
+      });
+      if (!loaded || loaded.naturalWidth <= 0 || loaded.naturalHeight <= 0) return null;
+
+      const c = document.createElement('canvas');
+      c.width = 816;
+      c.height = 156;
+      const ctx = c.getContext('2d');
+      if (!ctx) return null;
+      ctx.clearRect(0, 0, c.width, c.height);
+      ctx.drawImage(loaded, 0, 0, c.width, c.height);
+      return { dataUrl: c.toDataURL('image/png'), width: c.width, height: c.height };
+    } catch {
+      return null;
+    }
+  })();
+  return chefOneLogoPromise;
+}
+
 function rule(doc: jsPDF, y: number, x0 = M, x1 = PW - M, color: RGB = DIVIDER, lw = 0.45): void {
   doc.setDrawColor(...color);
   doc.setLineWidth(lw);
@@ -449,24 +483,20 @@ function drawIcon(doc: jsPDF, name: IconName, cx: number, cy: number, color: RGB
   }
 }
 
-function drawChefOneLogo(doc: jsPDF, x: number, y: number, scale = 1, tagline = true): void {
-  const iconSize = 25 * scale;
-  drawIcon(doc, 'chef', x + iconSize / 2, y + 13 * scale, NAVY, iconSize);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(24 * scale);
-  doc.setTextColor(...NAVY);
-  doc.text('Chef', x + 32 * scale, y + 21 * scale);
-  doc.setTextColor(...ORANGE);
-  doc.text('One', x + 88 * scale, y + 21 * scale);
-  if (tagline) {
-    doc.setFontSize(5.9 * scale);
-    doc.setTextColor(...MUTED);
-    doc.text('GESTIONA. CONTROLA. GANA.', x + 36 * scale, y + 34 * scale);
+function drawChefOneLogo(doc: jsPDF, logo: LogoAsset | null, x: number, y: number, w: number): void {
+  if (logo) {
+    const h = (w * logo.height) / logo.width;
+    doc.addImage(logo.dataUrl, 'PNG', x, y, w, h);
+    return;
   }
+  doc.setFont('times', 'bold');
+  doc.setFontSize(w * 0.19);
+  doc.setTextColor(220, 38, 38);
+  doc.text('Chef One', x, y + w * 0.19);
 }
 
 function drawPageBackground(doc: jsPDF): void {
-  doc.setFillColor(...PAPER);
+  doc.setFillColor(...WHITE);
   doc.rect(0, 0, PW, PH, 'F');
 }
 
@@ -572,7 +602,13 @@ function drawMetricCard(
   doc.text(opts.sub, opts.x + opts.w / 2, opts.y + opts.h - 10, { align: 'center' });
 }
 
-function drawHero(doc: jsPDF, payload: RecipePrintPayload, photo: PhotoAsset | null, vals: ReturnType<typeof productionValues>): void {
+function drawHero(
+  doc: jsPDF,
+  payload: RecipePrintPayload,
+  photo: PhotoAsset | null,
+  vals: ReturnType<typeof productionValues>,
+  logo: LogoAsset | null,
+): void {
   const { recipe, sheet } = payload;
   const photoX = 0;
   const photoY = 106;
@@ -582,7 +618,7 @@ function drawHero(doc: jsPDF, payload: RecipePrintPayload, photo: PhotoAsset | n
   const heroW = PW - heroX - M;
   const kind = recipeKind(recipe, sheet);
 
-  drawChefOneLogo(doc, 27, 27, 1, true);
+  drawChefOneLogo(doc, logo, 44, 43, 128);
   drawHeaderMeta(doc, payload);
   rule(doc, 104, 0, PW, BORDER, 0.55);
 
@@ -1088,7 +1124,14 @@ function drawObservationsCard(doc: jsPDF, payload: RecipePrintPayload, x: number
   doc.text(splitLines(doc, text || '—', w - 36, 2), x + 34, y + 47, { lineHeightFactor: 1.2 });
 }
 
-function drawFooter(doc: jsPDF, payload: RecipePrintPayload, page: number, total: number, qrDataUrl: string | null): void {
+function drawFooter(
+  doc: jsPDF,
+  payload: RecipePrintPayload,
+  page: number,
+  total: number,
+  qrDataUrl: string | null,
+  logo: LogoAsset | null,
+): void {
   rule(doc, FOOTER_TOP, M, PW - M, BORDER, 0.45);
 
   if (qrDataUrl && page === total) {
@@ -1110,7 +1153,7 @@ function drawFooter(doc: jsPDF, payload: RecipePrintPayload, page: number, total
   doc.text('Chef One', M + 58, FOOTER_TOP + 34);
 
   vRule(doc, 205, FOOTER_TOP + 8, PH - 18, BORDER, 0.45);
-  drawChefOneLogo(doc, PW / 2 - 45, FOOTER_TOP + 12, 0.58, true);
+  drawChefOneLogo(doc, logo, PW / 2 - 43, FOOTER_TOP + 21, 86);
   vRule(doc, 392, FOOTER_TOP + 8, PH - 18, BORDER, 0.45);
 
   const code = safe(payload.sheet?.codigoInterno, safe(payload.recipe.posArticleCode, `REC-${payload.recipe.id.slice(0, 5)}`));
@@ -1121,9 +1164,15 @@ function drawFooter(doc: jsPDF, payload: RecipePrintPayload, page: number, total
   doc.text(`Código: ${code}   |   Página ${page}/${total}`, PW - M - 168, FOOTER_TOP + 36);
 }
 
-function drawFirstPage(doc: jsPDF, payload: RecipePrintPayload, photo: PhotoAsset | null, vals: ReturnType<typeof productionValues>) {
+function drawFirstPage(
+  doc: jsPDF,
+  payload: RecipePrintPayload,
+  photo: PhotoAsset | null,
+  vals: ReturnType<typeof productionValues>,
+  logo: LogoAsset | null,
+) {
   drawPageBackground(doc);
-  drawHero(doc, payload, photo, vals);
+  drawHero(doc, payload, photo, vals, logo);
 
   const gridY = 354;
   const gap = 8;
@@ -1143,9 +1192,9 @@ function drawFirstPage(doc: jsPDF, payload: RecipePrintPayload, photo: PhotoAsse
   return { ingredientOverflow, stepOverflow };
 }
 
-function drawContinuationHeader(doc: jsPDF, payload: RecipePrintPayload): void {
+function drawContinuationHeader(doc: jsPDF, payload: RecipePrintPayload, logo: LogoAsset | null): void {
   drawPageBackground(doc);
-  drawChefOneLogo(doc, M, 26, 0.75, true);
+  drawChefOneLogo(doc, logo, M, 33, 104);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(...NAVY);
@@ -1168,11 +1217,17 @@ function drawContinuationSectionTitle(doc: jsPDF, title: string, count: string, 
   return y + 22;
 }
 
-function addContinuationPages(doc: jsPDF, payload: RecipePrintPayload, ingredientStart: number, stepStart: number): void {
+function addContinuationPages(
+  doc: jsPDF,
+  payload: RecipePrintPayload,
+  ingredientStart: number,
+  stepStart: number,
+  logo: LogoAsset | null,
+): void {
   if (ingredientStart >= payload.lines.length && stepStart >= payload.steps.length) return;
 
   doc.addPage();
-  drawContinuationHeader(doc, payload);
+  drawContinuationHeader(doc, payload, logo);
   let y = 102;
 
   if (ingredientStart < payload.lines.length) {
@@ -1186,7 +1241,7 @@ function addContinuationPages(doc: jsPDF, payload: RecipePrintPayload, ingredien
     for (let i = ingredientStart; i < payload.lines.length; i += 1) {
       if (y + rowH > SAFE_B) {
         doc.addPage();
-        drawContinuationHeader(doc, payload);
+        drawContinuationHeader(doc, payload, logo);
         y = drawContinuationSectionTitle(doc, 'Ingredientes restantes', 'continuación', 102);
       }
       drawIngredientRow(doc, payload, payload.lines[i]!, y - 8, M, CW, rowH);
@@ -1198,7 +1253,7 @@ function addContinuationPages(doc: jsPDF, payload: RecipePrintPayload, ingredien
   if (stepStart < payload.steps.length) {
     if (y + 44 > SAFE_B) {
       doc.addPage();
-      drawContinuationHeader(doc, payload);
+      drawContinuationHeader(doc, payload, logo);
       y = 102;
     }
     y = drawContinuationSectionTitle(doc, 'Pasos restantes', `${payload.steps.length - stepStart} pasos`, y);
@@ -1209,7 +1264,7 @@ function addContinuationPages(doc: jsPDF, payload: RecipePrintPayload, ingredien
       const rowH = Math.max(24, lines.length * 9 + 10);
       if (y + rowH > SAFE_B) {
         doc.addPage();
-        drawContinuationHeader(doc, payload);
+        drawContinuationHeader(doc, payload, logo);
         y = drawContinuationSectionTitle(doc, 'Pasos restantes', 'continuación', 102);
       }
       doc.setDrawColor(...ORANGE);
@@ -1231,7 +1286,8 @@ function addContinuationPages(doc: jsPDF, payload: RecipePrintPayload, ingredien
 
 export async function printRecipePDF(payload: RecipePrintPayload): Promise<void> {
   const photoAspect = 236 / 260;
-  const [photo, qrDataUrl] = await Promise.all([
+  const [logo, photo, qrDataUrl] = await Promise.all([
+    loadChefOneLogo(),
     loadPhoto(getOfficialRecipePhotoUrl(payload.sheet), photoAspect),
     (async () => {
       if (typeof window === 'undefined') return null;
@@ -1242,13 +1298,13 @@ export async function printRecipePDF(payload: RecipePrintPayload): Promise<void>
 
   const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
   const vals = productionValues(payload);
-  const overflow = drawFirstPage(doc, payload, photo, vals);
-  addContinuationPages(doc, payload, overflow.ingredientOverflow, overflow.stepOverflow);
+  const overflow = drawFirstPage(doc, payload, photo, vals, logo);
+  addContinuationPages(doc, payload, overflow.ingredientOverflow, overflow.stepOverflow, logo);
 
   const total = doc.getNumberOfPages();
   for (let p = 1; p <= total; p += 1) {
     doc.setPage(p);
-    drawFooter(doc, payload, p, total, qrDataUrl);
+    drawFooter(doc, payload, p, total, qrDataUrl, logo);
   }
 
   const blobUrl = doc.output('bloburl');
