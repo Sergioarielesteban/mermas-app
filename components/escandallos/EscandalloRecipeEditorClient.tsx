@@ -257,6 +257,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
             ? String(r.saleVatRatePct)
             : '10',
       );
+      if (stored?.draftFamilyName != null) setDraftFamilyName(stored.draftFamilyName);
       setDraftPosArticleCode(stored?.draftPosArticleCode != null ? stored.draftPosArticleCode : r.posArticleCode ?? '');
       setDraftFinalWeightQty(
         stored?.draftFinalWeightQty?.trim()
@@ -391,6 +392,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       draftPosArticleCode,
       draftFinalWeightQty,
       draftFinalWeightUnit,
+      draftFamilyName,
       ingredientDrafts,
       updatedAt: Date.now(),
     });
@@ -407,6 +409,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     draftPosArticleCode,
     draftFinalWeightQty,
     draftFinalWeightUnit,
+    draftFamilyName,
     ingredientDrafts,
   ]);
 
@@ -508,7 +511,12 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
       centralKitchenById,
     );
     return dashRows
-      .filter((r) => !r.isSubRecipe)
+      .filter((r) => {
+        if (r.isSubRecipe) return false;
+        // Solo platos de la misma familia que la receta actual
+        const rowFamily = (technicalSheetsByRecipe.get(r.id)?.categoria ?? '').trim();
+        return rowFamily === simulatorFamilyName;
+      })
       .map((r) => ({
         recipeId: r.id,
         foodCostPct: r.foodCostPct,
@@ -607,6 +615,18 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     const finalWeight = parseDecimal(draftFinalWeightQty);
     const gross = parseDecimal(draftSaleGross);
     const vat = parseDecimal(draftSaleVat);
+
+    // ── Validaciones previas al guardado ──────────────────────────────────
+    if (!draftRecipeName.trim()) {
+      setBanner('Introduce un nombre para la receta.');
+      return false;
+    }
+    if (!recipe.isSubRecipe && (y == null || y <= 0)) {
+      setBanner('Las raciones o salida deben ser mayores que 0.');
+      return false;
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     setBusyId(recipe.id);
     setBanner(null);
     setSuccessMsg(null);
@@ -741,6 +761,8 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
 
   const handleDeleteLine = async (lineId: string) => {
     if (!localId || !recipe || demoReadonly) return;
+    const confirmed = await appConfirm('Eliminar ingrediente\n\nEsta acción eliminará el ingrediente de la receta. No se puede deshacer.');
+    if (!confirmed) return;
     const supabase = getSupabaseClient()!;
     setBusyId(lineId);
     try {

@@ -74,6 +74,7 @@ export type EscandalloRecipeEditorPersistV1 = {
   draftPosArticleCode: string;
   draftFinalWeightQty?: string;
   draftFinalWeightUnit?: EscandalloYieldUnit;
+  draftFamilyName?: string;
   ingredientDrafts: IngredientDraftRow[];
   updatedAt: number;
 };
