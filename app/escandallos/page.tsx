@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { LucideIcon } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
@@ -10,6 +10,7 @@ import {
   BarChart3,
   Calculator,
   ChevronRight,
+  Copy,
   Eye,
   FileDown,
   MoreHorizontal,
@@ -27,9 +28,11 @@ import {
 import { useAuth } from '@/components/AuthProvider';
 import EscandalloQuickCalculatorModal from '@/components/escandallos/EscandalloQuickCalculatorModal';
 import RecipeQuickViewModal from '@/components/escandallos/RecipeQuickViewModal';
+import { appConfirm } from '@/lib/app-dialog-bridge';
 import { isDemoMode } from '@/lib/demo-mode';
 import { getDemoEscandalloPack } from '@/lib/demo-dataset';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { duplicateEscandalloRecipe } from '@/lib/escandallos-duplicate';
 import { fetchRecipeAllergensForLocal, type RecipeAllergenRow } from '@/lib/appcc-allergens-supabase';
 import {
   buildEscandalloDashboardRows,
@@ -379,7 +382,10 @@ function RecipeCard({
   onView,
   onRefresh,
   onPrint,
+  onDuplicate,
+  onDelete,
   printing = false,
+  duplicating = false,
 }: {
   r: EscandalloRecipeDashboardRow;
   photoUrl?: string | null;
@@ -388,7 +394,10 @@ function RecipeCard({
   onView?: () => void;
   onRefresh?: () => void;
   onPrint?: () => void;
+  onDuplicate?: () => void;
+  onDelete?: () => void;
   printing?: boolean;
+  duplicating?: boolean;
 }) {
   const editHref = actionHref ?? `/escandallos/recetas/${r.id}/editar`;
   const badgeTone = statusBadgeTone(r.bucket);
@@ -489,13 +498,38 @@ function RecipeCard({
           type="button"
           onClick={(event) => {
             event.stopPropagation();
+            onDuplicate?.();
+          }}
+          disabled={!onDuplicate || duplicating}
+          className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-1.5 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F7F3EE] active:bg-[#F7F3EE] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Copy className="h-3 w-3 shrink-0" />
+          <span className="truncate">{duplicating ? 'Duplicando…' : 'Duplicar'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
             return onRefresh ? onRefresh() : window.location.reload();
           }}
-          className="inline-flex h-8 items-center justify-center gap-1 rounded-lg bg-[#D32F2F] px-1.5 text-[10px] font-semibold text-white transition hover:bg-[#B91C1C] active:scale-[0.98]"
+          className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white px-1.5 text-[10px] font-semibold text-[#0A0908] transition hover:bg-[#F7F3EE] active:bg-[#F7F3EE]"
         >
           <RefreshCw className="h-3 w-3 shrink-0" />
           <span className="truncate">Actualizar</span>
         </button>
+        {onDelete ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete();
+            }}
+            className="col-span-2 inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-red-200 bg-red-50 px-1.5 text-[10px] font-semibold text-red-700 transition hover:bg-red-100 active:scale-[0.98]"
+          >
+            <Trash2 className="h-3 w-3 shrink-0" />
+            <span className="truncate">Eliminar</span>
+          </button>
+        ) : null}
       </div>
 
       <p className="mt-1.5 text-[8px] leading-snug text-[#7E7468]">
@@ -510,6 +544,7 @@ function RecipeCard({
 }
 
 export default function EscandallosPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { localId, localName, profileReady } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
@@ -522,6 +557,7 @@ export default function EscandallosPage() {
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [printingRecipeId, setPrintingRecipeId] = useState<string | null>(null);
+  const [duplicatingRecipeId, setDuplicatingRecipeId] = useState<string | null>(null);
   const [executiveReportBusy, setExecutiveReportBusy] = useState(false);
   const [quickViewRecipeId, setQuickViewRecipeId] = useState<string | null>(null);
   const [quickCalcOpen, setQuickCalcOpen] = useState(false);
@@ -916,6 +952,34 @@ export default function EscandallosPage() {
     setDeleteConfirmBase({ base, usageCount });
   };
 
+  const handleDuplicateRecipe = useCallback(
+    async (recipeId: string) => {
+      if (!localId || !supabaseOk || isDemoMode()) return;
+      const confirmed = await appConfirm('Se creará una copia completa editable.', {
+        title: 'Duplicar receta',
+        confirmLabel: 'Duplicar',
+      });
+      if (!confirmed) return;
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        setBanner('Conexión a datos no disponible.');
+        return;
+      }
+      setDuplicatingRecipeId(recipeId);
+      setBanner(null);
+      try {
+        const created = await duplicateEscandalloRecipe(supabase, localId, recipeId);
+        setQuickViewRecipeId(null);
+        router.push(`/escandallos/recetas/${created.id}/editar`);
+      } catch (error: unknown) {
+        setBanner(error instanceof Error ? error.message : 'No se pudo duplicar la receta.');
+      } finally {
+        setDuplicatingRecipeId(null);
+      }
+    },
+    [localId, router, supabaseOk],
+  );
+
   const handleConfirmDeleteBase = async () => {
     if (!localId || !supabaseOk || isDemoMode()) return;
     const modalState = deleteConfirmBase;
@@ -1121,7 +1185,10 @@ export default function EscandallosPage() {
                       onView={() => setQuickViewRecipeId(r.id)}
                       onRefresh={() => void load()}
                       onPrint={() => void handlePrintRecipe(r.id)}
+                      onDuplicate={!isDemoMode() ? () => void handleDuplicateRecipe(r.id) : undefined}
+                      onDelete={!isDemoMode() && supabaseOk ? () => handleDeleteBase(r) : undefined}
                       printing={printingRecipeId === r.id}
+                      duplicating={duplicatingRecipeId === r.id}
                     />
                   ))
                 )}
@@ -1236,6 +1303,18 @@ export default function EscandallosPage() {
                           <PencilLine className="h-3.5 w-3.5 shrink-0" />
                           <span>Editar</span>
                         </Link>
+                        <button
+                          type="button"
+                          disabled={duplicatingRecipeId === r.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleDuplicateRecipe(r.id);
+                          }}
+                          className="inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-2 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+                        >
+                          <Copy className="h-3.5 w-3.5 shrink-0" />
+                          <span>{duplicatingRecipeId === r.id ? 'Duplicando…' : 'Duplicar'}</span>
+                        </button>
                         <button
                           type="button"
                           onClick={(event) => {
@@ -1487,6 +1566,8 @@ export default function EscandallosPage() {
           supabase={isDemoMode() ? null : getSupabaseClient()}
           onClose={() => setQuickViewRecipeId(null)}
           onPrint={() => void handlePrintRecipe(quickViewRecipe.id)}
+          onDuplicate={() => void handleDuplicateRecipe(quickViewRecipe.id)}
+          duplicating={duplicatingRecipeId === quickViewRecipe.id}
           editHref={`/escandallos/recetas/${quickViewRecipe.id}/editar`}
           recipe={quickViewRecipe}
           lines={linesByRecipe[quickViewRecipe.id] ?? []}
@@ -1518,7 +1599,9 @@ export default function EscandallosPage() {
                 <AlertTriangle className="h-5 w-5" aria-hidden />
               </div>
               <div className="min-w-0">
-                <h3 className="text-[20px] font-black text-zinc-950">Eliminar base</h3>
+                <h3 className="text-[20px] font-black text-zinc-950">
+                  {deleteConfirmBase.base.isSubRecipe ? 'Eliminar base' : 'Eliminar receta'}
+                </h3>
                 <p className="mt-1 text-sm text-zinc-600">Esta acción no se puede deshacer.</p>
                 {deleteConfirmBase.usageCount > 0 ? (
                   <p className="mt-3 text-sm text-zinc-700">
