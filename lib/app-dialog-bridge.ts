@@ -4,9 +4,15 @@
  */
 
 export type AppDialogBridge = {
-  confirm: (message: string) => Promise<boolean>;
+  confirm: (message: string, options?: AppConfirmOptions) => Promise<boolean>;
   alert: (message: string) => Promise<void>;
   prompt: (message: string, defaultValue?: string) => Promise<string | null>;
+};
+
+export type AppConfirmOptions = {
+  title?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
 };
 
 let bridge: AppDialogBridge | null = null;
@@ -15,8 +21,8 @@ export function setAppDialogBridge(next: AppDialogBridge | null) {
   bridge = next;
 }
 
-export function appConfirm(message: string): Promise<boolean> {
-  if (bridge) return bridge.confirm(message);
+export function appConfirm(message: string, options?: AppConfirmOptions): Promise<boolean> {
+  if (bridge) return bridge.confirm(message, options);
   if (typeof window !== 'undefined') return Promise.resolve(window.confirm(message));
   return Promise.resolve(false);
 }

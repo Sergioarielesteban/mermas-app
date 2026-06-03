@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Layers, Search, Trash2 } from 'lucide-react';
+import { ChevronRight, Copy, Layers, Search, Trash2 } from 'lucide-react';
 import EscandalloIngredientDraftEditor from '@/components/escandallos/EscandalloIngredientDraftEditor';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
@@ -14,6 +15,10 @@ import {
   type IngredientDraftRow,
 } from '@/lib/escandallos-recipe-draft-utils';
 import { ESCANDALLOS_WEIGHTED_PRICE_WINDOW_DAYS } from '@/lib/escandallos-weighted-purchase-prices';
+import {
+  duplicateEscandalloRecipe,
+  duplicateProcessedProductForEscandallo,
+} from '@/lib/escandallos-duplicate';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   deleteProcessedProductForEscandallo,
@@ -36,6 +41,7 @@ import { formatMoneyEur, formatUnitPriceEur, roundMoney } from '@/lib/money-form
 import type { Unit } from '@/lib/types';
 
 export default function EscandallosBasesLabClient() {
+  const router = useRouter();
   const { localId, profileReady } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
   const [recipes, setRecipes] = useState<EscandalloRecipe[]>([]);
@@ -114,7 +120,10 @@ export default function EscandallosBasesLabClient() {
 
   useEffect(() => {
     if (!profileReady) return;
-    void load();
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [profileReady, load]);
 
   const refreshRecipeLines = async (recipeId: string) => {
@@ -220,6 +229,50 @@ export default function EscandallosBasesLabClient() {
       setProcessedProducts((prev) => prev.filter((p) => p.id !== id));
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'No se pudo eliminar elaborado.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDuplicateProcessed = async (id: string) => {
+    if (!localId || !supabaseOk) return;
+    if (
+      !(await appConfirm('Se creará una copia completa editable.', {
+        title: 'Duplicar elaboración',
+        confirmLabel: 'Duplicar',
+      }))
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    setBusyId(`duplicate-processed-${id}`);
+    try {
+      const row = await duplicateProcessedProductForEscandallo(supabase, localId, id);
+      setProcessedProducts((prev) => [...prev, row].sort((a, b) => a.name.localeCompare(b.name, 'es')));
+    } catch (e: unknown) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo duplicar elaborado.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDuplicateRecipe = async (id: string) => {
+    if (!localId || !supabaseOk) return;
+    if (
+      !(await appConfirm('Se creará una copia completa editable.', {
+        title: 'Duplicar receta',
+        confirmLabel: 'Duplicar',
+      }))
+    ) {
+      return;
+    }
+    const supabase = getSupabaseClient()!;
+    setBusyId(`duplicate-recipe-${id}`);
+    try {
+      const created = await duplicateEscandalloRecipe(supabase, localId, id);
+      router.push(`/escandallos/recetas/${created.id}/editar`);
+    } catch (e: unknown) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo duplicar la base.');
     } finally {
       setBusyId(null);
     }
@@ -418,15 +471,26 @@ export default function EscandallosBasesLabClient() {
                       {p.inputQty}→{p.outputQty} {p.outputUnit} · {formatUnitPriceEur(perOut, p.outputUnit)}
                     </span>
                   </p>
-                  <button
-                    type="button"
-                    disabled={busyId === p.id}
-                    onClick={() => void handleDeleteProcessed(p.id)}
-                    className="shrink-0 rounded p-1 text-[#B91C1C]"
-                    aria-label="Eliminar elaborado"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={busyId === `duplicate-processed-${p.id}`}
+                      onClick={() => void handleDuplicateProcessed(p.id)}
+                      className="rounded p-1 text-zinc-600 disabled:opacity-50"
+                      aria-label="Duplicar elaborado"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === p.id}
+                      onClick={() => void handleDeleteProcessed(p.id)}
+                      className="rounded p-1 text-[#B91C1C]"
+                      aria-label="Eliminar elaborado"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -470,12 +534,23 @@ export default function EscandallosBasesLabClient() {
                         {formatUnitPriceEur(per, r.yieldLabel)}
                       </p>
                     </div>
-                    <Link
-                      href={`/escandallos/recetas/${r.id}/editar`}
-                      className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-zinc-800"
-                    >
-                      Editar
-                    </Link>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={busyId === `duplicate-recipe-${r.id}`}
+                        onClick={() => void handleDuplicateRecipe(r.id)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-bold text-zinc-800 hover:bg-zinc-50 disabled:opacity-50"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        {busyId === `duplicate-recipe-${r.id}` ? 'Duplicando…' : 'Duplicar'}
+                      </button>
+                      <Link
+                        href={`/escandallos/recetas/${r.id}/editar`}
+                        className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-zinc-800"
+                      >
+                        Editar
+                      </Link>
+                    </div>
                   </li>
                 );
               })}

@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ClipboardList,
   ChevronDown,
+  Copy,
   Pencil,
   RefreshCw,
   Save,
@@ -43,6 +44,7 @@ import {
 } from '@/lib/escandallos-technical-sheet-supabase';
 import { fetchEscandalloRecipeCategoriasMap } from '@/lib/finanzas-rentabilidad-escandallo';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
+import { duplicateEscandalloRecipe } from '@/lib/escandallos-duplicate';
 import {
   clearEscandalloRecipeEditorDraft,
   readEscandalloRecipeEditorDraft,
@@ -842,6 +844,30 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     }
   };
 
+  const handleDuplicateRecipe = async () => {
+    if (!localId || !recipe || demoReadonly) return;
+    const confirmed = await appConfirm('Se creará una copia completa editable.', {
+      title: 'Duplicar receta',
+      confirmLabel: 'Duplicar',
+    });
+    if (!confirmed) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setBanner('Conexión a datos no disponible.');
+      return;
+    }
+    setBusyId(`duplicate-${recipe.id}`);
+    setBanner(null);
+    try {
+      const created = await duplicateEscandalloRecipe(supabase, localId, recipe.id);
+      router.push(`/escandallos/recetas/${created.id}/editar`);
+    } catch (e: unknown) {
+      setBanner(e instanceof Error ? e.message : 'No se pudo duplicar la receta.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleCreateTechnicalSheet = async () => {
     if (!localId || demoReadonly || !supabaseOk) return;
     const supabase = getSupabaseClient()!;
@@ -1332,12 +1358,12 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
               {alerts.length > 0 ? (
                 <p className="mt-1 truncate text-center text-[8px] font-semibold text-amber-800">{alerts.slice(0, 2).join(' · ')}</p>
               ) : null}
-              <div className="mt-1.5 grid grid-cols-3 gap-1">
+              <div className="mt-1.5 grid grid-cols-4 gap-1">
                 <button
                   type="button"
                   disabled={busyId !== null || demoReadonly}
                   onClick={() => void handleSaveAll()}
-                  className="col-span-3 inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#D32F2F] text-[12px] font-bold text-white transition hover:bg-[#B91C1C] disabled:opacity-50"
+                  className="col-span-4 inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#D32F2F] text-[12px] font-bold text-white transition hover:bg-[#B91C1C] disabled:opacity-50"
                 >
                   <Save className="h-3.5 w-3.5" />
                   {busyId !== null ? 'Guardando…' : 'Guardar cambios'}
@@ -1363,6 +1389,15 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                     disabled={busyId !== null}
                   />
                 ) : null}
+                <button
+                  type="button"
+                  disabled={busyId !== null || demoReadonly}
+                  onClick={() => void handleDuplicateRecipe()}
+                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white text-[9px] font-semibold text-[#0A0908] disabled:opacity-50"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {busyId === `duplicate-${recipe.id}` ? 'Duplicando…' : 'Duplicar'}
+                </button>
                 <button
                   type="button"
                   disabled={busyId === 'refresh' || demoReadonly}

@@ -1,12 +1,18 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { setAppDialogBridge, type AppDialogBridge } from '@/lib/app-dialog-bridge';
 
 export function AppDialogProvider({ children }: { children: React.ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState<{ message: string } | null>(null);
+  const subscribeMounted = useCallback(() => () => undefined, []);
+  const mounted = useSyncExternalStore(subscribeMounted, () => true, () => false);
+  const [confirmOpen, setConfirmOpen] = useState<{
+    message: string;
+    title?: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  } | null>(null);
   const confirmResolveRef = useRef<((v: boolean) => void) | null>(null);
 
   const [alertOpen, setAlertOpen] = useState<{ message: string } | null>(null);
@@ -36,21 +42,18 @@ export function AppDialogProvider({ children }: { children: React.ReactNode }) {
     setPromptValue('');
   }, []);
 
-  useEffect(() => setMounted(true), []);
-
   useEffect(() => {
     if (!promptOpen) return;
-    setPromptValue(promptOpen.defaultValue);
     const t = window.setTimeout(() => promptInputRef.current?.focus(), 50);
     return () => window.clearTimeout(t);
   }, [promptOpen]);
 
   useEffect(() => {
     const bridge: AppDialogBridge = {
-      confirm: (message) =>
+      confirm: (message, options) =>
         new Promise((resolve) => {
           confirmResolveRef.current = resolve;
-          setConfirmOpen({ message });
+          setConfirmOpen({ message, ...options });
         }),
       alert: (message) =>
         new Promise((resolve) => {
@@ -59,6 +62,7 @@ export function AppDialogProvider({ children }: { children: React.ReactNode }) {
         }),
       prompt: (message, defaultValue = '') =>
         new Promise((resolve) => {
+          setPromptValue(defaultValue);
           promptResolveRef.current = resolve;
           setPromptOpen({ message, defaultValue });
         }),
@@ -102,7 +106,7 @@ export function AppDialogProvider({ children }: { children: React.ReactNode }) {
       ? overlay(
           <div className={cardClass} role="alertdialog" aria-modal="true" aria-labelledby="app-confirm-title">
             <p id="app-confirm-title" className="text-xs font-extrabold uppercase tracking-wide text-zinc-500">
-              Confirmación
+              {confirmOpen.title ?? 'Confirmación'}
             </p>
             <p className="mt-2 text-base font-semibold leading-snug text-zinc-800">{confirmOpen.message}</p>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -111,14 +115,14 @@ export function AppDialogProvider({ children }: { children: React.ReactNode }) {
                 className="h-11 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-bold text-zinc-800"
                 onClick={() => closeConfirm(false)}
               >
-                Cancelar
+                {confirmOpen.cancelLabel ?? 'Cancelar'}
               </button>
               <button
                 type="button"
                 className="h-11 rounded-xl bg-[#D32F2F] px-4 text-sm font-black uppercase tracking-wide text-white shadow-sm"
                 onClick={() => closeConfirm(true)}
               >
-                Aceptar
+                {confirmOpen.confirmLabel ?? 'Aceptar'}
               </button>
             </div>
           </div>,

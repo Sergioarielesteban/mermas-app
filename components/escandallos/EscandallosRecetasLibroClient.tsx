@@ -1,10 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { BookOpen, Layers, Plus, Printer, Search, Sparkles } from 'lucide-react';
+import { BookOpen, Copy, Layers, Plus, Printer, Search, Sparkles } from 'lucide-react';
 import MermasStyleHero from '@/components/MermasStyleHero';
 import { useAuth } from '@/components/AuthProvider';
+import { appConfirm } from '@/lib/app-dialog-bridge';
+import { duplicateEscandalloRecipe } from '@/lib/escandallos-duplicate';
 import { getDemoEscandalloPack } from '@/lib/demo-dataset';
 import { isDemoMode } from '@/lib/demo-mode';
 import { buildEscandalloDashboardRows, bucketLabel, type EscandalloRecipeDashboardRow } from '@/lib/escandallos-analytics';
@@ -40,6 +43,7 @@ type FcFilter = 'all' | 'high' | 'normal';
 type LinesFilter = 'all' | 'with' | 'without';
 
 export default function EscandallosRecetasLibroClient() {
+  const router = useRouter();
   const { localId, profileReady } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
   const demoPack = isDemoMode() && Boolean(localId) && !supabaseOk;
@@ -53,6 +57,7 @@ export default function EscandallosRecetasLibroClient() {
   const [loading, setLoading] = useState(true);
   const [banner, setBanner] = useState<string | null>(null);
   const [printingRecipeId, setPrintingRecipeId] = useState<string | null>(null);
+  const [duplicatingRecipeId, setDuplicatingRecipeId] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<CatFilter>('__all__');
   const [pvp, setPvp] = useState<PvpFilter>('all');
@@ -122,7 +127,10 @@ export default function EscandallosRecetasLibroClient() {
 
   useEffect(() => {
     if (!profileReady) return;
-    void load();
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [profileReady, load]);
 
   const rawById = useMemo(() => new Map(rawProducts.map((p) => [p.id, p])), [rawProducts]);
@@ -226,6 +234,33 @@ export default function EscandallosRecetasLibroClient() {
       }
     },
     [demoPack, linesByRecipe, localId, processedById, rawById, recipes, rows, centralKitchenById],
+  );
+
+  const handleDuplicateRecipe = useCallback(
+    async (recipeId: string) => {
+      if (!localId || demoPack) return;
+      const confirmed = await appConfirm('Se creará una copia completa editable.', {
+        title: 'Duplicar receta',
+        confirmLabel: 'Duplicar',
+      });
+      if (!confirmed) return;
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        setBanner('Conexión a datos no disponible.');
+        return;
+      }
+      setDuplicatingRecipeId(recipeId);
+      setBanner(null);
+      try {
+        const created = await duplicateEscandalloRecipe(supabase, localId, recipeId);
+        router.push(`/escandallos/recetas/${created.id}/editar`);
+      } catch (error: unknown) {
+        setBanner(error instanceof Error ? error.message : 'No se pudo duplicar la receta.');
+      } finally {
+        setDuplicatingRecipeId(null);
+      }
+    },
+    [demoPack, localId, router],
   );
 
   if (!profileReady) {
@@ -422,7 +457,7 @@ export default function EscandallosRecetasLibroClient() {
                     <dd className="font-bold tabular-nums text-zinc-900">{margin != null ? `${margin} %` : '—'}</dd>
                   </div>
                 </dl>
-                <div className="mt-4 grid grid-cols-3 gap-1.5">
+                <div className="mt-4 grid grid-cols-2 gap-1.5">
                   {!demoPack ? (
                     <Link
                       href={`/escandallos/recetas/${r.id}/editar`}
@@ -444,6 +479,17 @@ export default function EscandallosRecetasLibroClient() {
                     <Printer className="h-3.5 w-3.5" aria-hidden />
                     {printingRecipeId === r.id ? 'Imprimiendo…' : 'Imprimir'}
                   </button>
+                  {!demoPack ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleDuplicateRecipe(r.id)}
+                      disabled={duplicatingRecipeId === r.id}
+                      className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-[rgba(10,9,8,0.08)] bg-white text-[9px] font-semibold text-[#0A0908] transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Copy className="h-3.5 w-3.5" aria-hidden />
+                      {duplicatingRecipeId === r.id ? 'Duplicando…' : 'Duplicar'}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="inline-flex h-9 items-center justify-center gap-1 rounded-lg bg-[#D32F2F] text-[9px] font-semibold text-white transition hover:bg-[#B91C1C]"

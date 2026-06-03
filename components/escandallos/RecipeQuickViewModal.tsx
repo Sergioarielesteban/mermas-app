@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ChefHat, ChevronDown, Edit3, Printer, X } from 'lucide-react';
+import { AlertTriangle, ChefHat, ChevronDown, Copy, Edit3, Printer, X } from 'lucide-react';
 import RecipePriceSimulatorPanel from '@/components/escandallos/RecipePriceSimulatorPanel';
 import {
   buildFamilyPriceBenchmark,
@@ -69,6 +69,8 @@ export type RecipeQuickViewModalProps = {
   supabase: SupabaseClient | null;
   onClose: () => void;
   onPrint?: () => void;
+  onDuplicate?: () => void;
+  duplicating?: boolean;
   editHref?: string | null;
 } & (EscandalloPayload | CentralPayload);
 
@@ -703,6 +705,15 @@ export default function RecipeQuickViewModal(props: RecipeQuickViewModalProps) {
                 Editar
               </div>
             )}
+            <button
+              type="button"
+              onClick={props.onDuplicate}
+              disabled={!props.onDuplicate || props.duplicating}
+              className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white py-3 text-[13px] font-bold text-zinc-900 shadow-sm transition hover:bg-zinc-50 active:scale-[0.99] disabled:opacity-40"
+            >
+              <Copy className="h-4 w-4" />
+              {props.duplicating ? 'Duplicando…' : 'Duplicar'}
+            </button>
             <button
               type="button"
               onClick={props.onPrint}
