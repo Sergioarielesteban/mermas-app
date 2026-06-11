@@ -47,9 +47,9 @@ export default function InventarioSubnav({ className = '' }: Props) {
 
   return (
     <section
-      className={`rounded-[24px] border border-zinc-200/80 bg-white/95 p-2.5 shadow-[0_14px_34px_rgba(15,23,42,0.04)] ring-1 ring-zinc-100/80 sm:p-3 ${className}`.trim()}
+      className={`min-w-0 max-w-full overflow-hidden rounded-[24px] border border-zinc-200/80 bg-white/95 p-2 shadow-[0_14px_34px_rgba(15,23,42,0.04)] ring-1 ring-zinc-100/80 sm:p-2.5 ${className}`.trim()}
     >
-      <nav aria-label="Secciones Inventario" className="grid grid-cols-2 gap-2">
+      <nav aria-label="Secciones Inventario" className="grid min-w-0 grid-cols-2 gap-1.5 sm:gap-2">
         {LINKS.map(({ href, label, Icon, iconClass }) => {
           const active = navActive(pathname, href);
           return (
@@ -57,7 +57,7 @@ export default function InventarioSubnav({ className = '' }: Props) {
               key={href}
               href={href}
               className={[
-                'group flex min-h-[2.65rem] items-center gap-2 rounded-[18px] border px-2.5 py-2 text-left transition active:scale-[0.99] sm:min-h-[2.8rem] sm:px-3',
+                'group flex min-h-[2.5rem] min-w-0 items-center gap-1.5 rounded-[18px] border px-2 py-1.5 text-left transition active:scale-[0.99] sm:min-h-[2.65rem] sm:gap-2 sm:px-2.5 sm:py-2',
                 active
                   ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
                   : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
@@ -65,13 +65,15 @@ export default function InventarioSubnav({ className = '' }: Props) {
             >
               <span
                 className={[
-                  'grid h-7 w-7 shrink-0 place-items-center rounded-full ring-1',
+                  'grid h-6 w-6 shrink-0 place-items-center rounded-full ring-1 sm:h-7 sm:w-7',
                   iconClass,
                 ].join(' ')}
               >
-                <Icon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                <Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" strokeWidth={2} aria-hidden />
               </span>
-              <span className="block text-[13px] font-black leading-tight text-zinc-950">{label}</span>
+              <span className="min-w-0 truncate text-[12px] font-black leading-tight text-zinc-950 sm:text-[13px]">
+                {label}
+              </span>
             </Link>
           );
         })}

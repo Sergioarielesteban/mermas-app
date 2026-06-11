@@ -143,7 +143,7 @@ export default function InventarioConteoPage() {
   }
 
   return (
-    <div className="space-y-2 sm:space-y-2.5">
+    <div className="min-w-0 space-y-2 sm:space-y-2.5">
       <div className="flex items-center justify-between text-[11px] font-semibold text-zinc-600">
         <span>
           Producto {index + 1} / {items.length}

@@ -80,7 +80,7 @@ export default function InventarioStockPage() {
   const linkedCount = React.useMemo(() => items.filter((i) => i.supplierProductId).length, [items]);
 
   return (
-    <div className="space-y-2 sm:space-y-2.5">
+    <div className="min-w-0 space-y-2 sm:space-y-2.5">
       {banner ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-950 ring-1 ring-amber-100">
           {banner}
@@ -117,29 +117,31 @@ export default function InventarioStockPage() {
         </p>
       </section>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[12rem] flex-1">
+      <div className="grid min-w-0 grid-cols-1 gap-2">
+        <div className="relative min-w-0 w-full">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" aria-hidden />
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar producto…"
-            className="h-9 w-full rounded-2xl border border-zinc-200/80 bg-white pl-8 pr-3 text-[13px] shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70 outline-none focus:ring-[#D32F2F]/15"
+            className="h-9 w-full min-w-0 rounded-2xl border border-zinc-200/80 bg-white pl-8 pr-3 text-[13px] shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70 outline-none focus:ring-[#D32F2F]/15"
           />
         </div>
-        <Link
-          href="/inventario/conteo"
-          className="inline-flex h-9 shrink-0 items-center rounded-2xl bg-[#D32F2F] px-3 text-[11px] font-bold text-white shadow-[0_10px_20px_rgba(211,47,47,0.12)]"
-        >
-          Conteo
-        </Link>
-        <Link
-          href="/inventario/movimientos"
-          className="inline-flex h-9 shrink-0 items-center rounded-2xl border border-zinc-200/80 bg-white px-3 text-[11px] font-bold text-zinc-800 shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70"
-        >
-          Movimientos
-        </Link>
+        <div className="grid min-w-0 grid-cols-2 gap-2">
+          <Link
+            href="/inventario/conteo"
+            className="inline-flex h-9 min-w-0 items-center justify-center rounded-2xl bg-[#D32F2F] px-2 text-[11px] font-bold text-white shadow-[0_10px_20px_rgba(211,47,47,0.12)]"
+          >
+            Conteo
+          </Link>
+          <Link
+            href="/inventario/movimientos"
+            className="inline-flex h-9 min-w-0 items-center justify-center rounded-2xl border border-zinc-200/80 bg-white px-2 text-[11px] font-bold text-zinc-800 shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70"
+          >
+            Movimientos
+          </Link>
+        </div>
       </div>
 
       {loading ? (
@@ -159,7 +161,7 @@ export default function InventarioStockPage() {
           ) : null}
         </div>
       ) : (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((item) => (
             <InventarioStockCard
               key={item.id}

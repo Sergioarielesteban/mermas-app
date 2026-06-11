@@ -33,14 +33,14 @@ export default function InventarioMovementTimeline({
   }
 
   return (
-    <ul className="space-y-1.5">
+    <ul className="min-w-0 space-y-1.5">
       {movements.map((m) => {
         const inbound = m.quantity_delta >= 0;
         return (
           <li
             key={m.id}
             className={[
-              'rounded-2xl border-l-[3px] px-2.5 py-2 ring-1 shadow-[0_2px_8px_rgba(24,24,27,0.035)]',
+              'min-w-0 rounded-2xl border-l-[3px] px-2.5 py-2 ring-1 shadow-[0_2px_8px_rgba(24,24,27,0.035)]',
               inbound
                 ? 'border-l-emerald-500 bg-white ring-emerald-100/80'
                 : 'border-l-amber-500 bg-white ring-amber-100/80',
