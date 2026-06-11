@@ -10,6 +10,7 @@ import {
   Printer,
   TrendingDown,
   TrendingUp,
+  Warehouse,
   X,
 } from 'lucide-react';
 import React from 'react';
@@ -152,6 +153,107 @@ export default function PedidosRecepcionSummarySheet({ open, onClose, payload }:
           id="pedidos-recepcion-summary-print"
           className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain px-2.5 pb-3 pt-2 [-webkit-overflow-scrolling:touch] sm:px-3 print:overflow-visible print:pb-4"
         >
+          {payload.inventoryStock ? (
+            <section className="mb-2 rounded-xl border border-zinc-200/90 bg-white p-2 shadow-sm ring-1 ring-zinc-100/90">
+              <div className="mb-1.5 flex items-center gap-1.5 px-0.5">
+                <Warehouse className="h-3.5 w-3.5 text-[#B91C1C]" aria-hidden />
+                <p className="text-[9px] font-black uppercase tracking-[0.14em] text-zinc-500">Inventario</p>
+              </div>
+
+              {payload.inventoryStock.stockEntriesApplied > 0 ? (
+                <div className="rounded-lg border border-emerald-200/90 bg-emerald-50/95 px-2 py-1.5 ring-1 ring-emerald-100/80">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" strokeWidth={2.25} aria-hidden />
+                    <div>
+                      <p className="text-[11px] font-bold text-emerald-950">
+                        Stock actualizado · {payload.inventoryStock.stockEntriesApplied} entrada
+                        {payload.inventoryStock.stockEntriesApplied === 1 ? '' : 's'}
+                      </p>
+                      <p className="text-[10px] leading-snug text-emerald-900/90">
+                        Las cantidades recibidas ya están en inventario para los productos enlazados.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : payload.inventoryStock.linkedLineCount > 0 ? (
+                <div className="rounded-lg border border-amber-200/90 bg-amber-50/95 px-2 py-1.5 ring-1 ring-amber-100/80">
+                  <p className="text-[11px] font-bold text-amber-950">Stock no aplicado en esta recepción</p>
+                  <p className="text-[10px] leading-snug text-amber-900/90">
+                    Hay líneas enlazadas pero no se registraron entradas (revisa cantidades recibidas).
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-zinc-200/90 bg-zinc-50/80 px-2 py-1.5 ring-1 ring-zinc-100/80">
+                  <p className="text-[11px] font-bold text-zinc-800">Sin impacto en inventario</p>
+                  <p className="text-[10px] leading-snug text-zinc-600">
+                    Ninguna línea de este pedido está enlazada a stock. Enlaza artículos en Valoración → producto
+                    proveedor.
+                  </p>
+                </div>
+              )}
+
+              {payload.inventoryStock.linkedLines.length > 0 ? (
+                <div className="mt-2">
+                  <p className="mb-1 px-0.5 text-[8px] font-bold uppercase tracking-wide text-zinc-500">
+                    Entradas de stock
+                  </p>
+                  <ul className="space-y-1">
+                    {payload.inventoryStock.linkedLines.map((row, idx) => (
+                      <li
+                        key={`${row.label}-${idx}`}
+                        className="flex items-start justify-between gap-2 rounded-lg border border-emerald-200/70 bg-emerald-50/40 px-2 py-1.5 text-[10px] ring-1 ring-emerald-100/60"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-bold leading-snug text-zinc-900 [overflow-wrap:anywhere]">{row.label}</p>
+                          <p className="text-[9px] font-semibold text-emerald-900/90">→ {row.inventoryName}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="font-black tabular-nums text-zinc-800">{row.qtyLabel}</p>
+                          <p className="text-[8px] font-bold uppercase text-emerald-800">
+                            {row.applied ? 'Aplicado' : 'Pendiente'}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {payload.inventoryStock.unlinkedLines.length > 0 ? (
+                <div className="mt-2">
+                  <p className="mb-1 px-0.5 text-[8px] font-bold uppercase tracking-wide text-zinc-500">
+                    Sin enlace a inventario
+                  </p>
+                  <ul className="space-y-1">
+                    {payload.inventoryStock.unlinkedLines.map((row, idx) => (
+                      <li
+                        key={`${row.label}-u-${idx}`}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200/80 bg-zinc-50/70 px-2 py-1.5 text-[10px] ring-1 ring-zinc-100/70"
+                      >
+                        <p className="min-w-0 font-semibold leading-snug text-zinc-800 [overflow-wrap:anywhere]">
+                          {row.label}
+                        </p>
+                        <p className="shrink-0 font-black tabular-nums text-zinc-600">{row.qtyLabel}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  navRouter.push('/inventario/movimientos');
+                }}
+                className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white text-[10px] font-bold text-zinc-800 ring-1 ring-zinc-100 print:hidden"
+              >
+                Ver movimientos de inventario
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            </section>
+          ) : null}
+
           {payload.incidentRows.length > 0 ? (
             <section>
               <p className="mb-1 px-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-zinc-500">

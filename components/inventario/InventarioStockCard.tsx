@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ClipboardList, History, SlidersHorizontal } from 'lucide-react';
+import { ClipboardList, History, SlidersHorizontal, Trash2 } from 'lucide-react';
 import type { InventoryMovement } from '@/lib/inventory-operations-supabase';
 import { MOVEMENT_TYPE_LABELS } from '@/lib/inventory-operations-supabase';
 import type { InventoryStockRow } from '@/lib/inventory-operations-supabase';
@@ -19,9 +19,10 @@ type Props = {
   lastMovement?: InventoryMovement | null;
   onAdjust: (item: InventoryStockRow) => void;
   onCount: (item: InventoryStockRow) => void;
+  onRotura: (item: InventoryStockRow) => void;
 };
 
-export default function InventarioStockCard({ item, lastMovement, onAdjust, onCount }: Props) {
+export default function InventarioStockCard({ item, lastMovement, onAdjust, onCount, onRotura }: Props) {
   const status = resolveStockStatus(item.quantity_on_hand, item.min_stock);
   const unitLabel = labelInventoryUnit(item.unit);
   const supplierLine = item.supplierProductId ? 'Proveedor enlazado' : 'Sin proveedor';
@@ -80,14 +81,22 @@ export default function InventarioStockCard({ item, lastMovement, onAdjust, onCo
           <ClipboardList className="h-3 w-3 shrink-0" aria-hidden />
           <span className="truncate">Contar</span>
         </button>
-        <Link
-          href={`/inventario/movimientos?item=${item.id}`}
-          className="inline-flex min-h-[34px] min-w-0 items-center justify-center gap-0.5 rounded-2xl border border-zinc-200 bg-white px-1 text-[9px] font-bold text-zinc-700 transition hover:bg-zinc-50 sm:gap-1 sm:px-1.5 sm:text-[10px]"
+        <button
+          type="button"
+          onClick={() => onRotura(item)}
+          className="inline-flex min-h-[34px] min-w-0 items-center justify-center gap-0.5 rounded-2xl border border-amber-200/80 bg-amber-50/80 px-1 text-[9px] font-bold text-amber-950 transition hover:bg-amber-100/80 sm:gap-1 sm:px-1.5 sm:text-[10px]"
         >
-          <History className="h-3 w-3 shrink-0" aria-hidden />
-          <span className="truncate">Movim.</span>
-        </Link>
+          <Trash2 className="h-3 w-3 shrink-0" aria-hidden />
+          <span className="truncate">Rotura</span>
+        </button>
       </div>
+      <Link
+        href={`/inventario/movimientos?item=${item.id}`}
+        className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-zinc-500 hover:text-zinc-800"
+      >
+        <History className="h-3 w-3" aria-hidden />
+        Movimientos
+      </Link>
     </article>
   );
 }

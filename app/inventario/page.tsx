@@ -6,6 +6,7 @@ import React from 'react';
 import { AlertTriangle, Package, Search, Truck } from 'lucide-react';
 import InventarioStockCard from '@/components/inventario/InventarioStockCard';
 import InventarioAdjustSheet from '@/components/inventario/InventarioAdjustSheet';
+import InventarioRoturaSheet from '@/components/inventario/InventarioRoturaSheet';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
@@ -28,6 +29,8 @@ export default function InventarioStockPage() {
   const [filter, setFilter] = React.useState<'all' | 'alerts'>('all');
   const [adjustItem, setAdjustItem] = React.useState<InventoryStockRow | null>(null);
   const [adjustBusy, setAdjustBusy] = React.useState(false);
+  const [roturaItem, setRoturaItem] = React.useState<InventoryStockRow | null>(null);
+  const [roturaBusy, setRoturaBusy] = React.useState(false);
 
   const load = React.useCallback(async () => {
     if (!localId || !isSupabaseEnabled()) {
@@ -109,11 +112,8 @@ export default function InventarioStockPage() {
           </span>
         </div>
         <p className="mt-1 text-[10px] leading-snug text-zinc-500">
-          Recepción de pedidos generará entradas cuando el artículo esté enlazado. Configura en{' '}
-          <Link href="/inventario/valoracion" className="font-bold text-[#B91C1C]">
-            Valoración
-          </Link>
-          .
+          Al validar recepción en Pedidos, el stock sube automáticamente en productos enlazados (Valoración → artículo
+          proveedor).
         </p>
       </section>
 
@@ -171,6 +171,7 @@ export default function InventarioStockPage() {
               onCount={(row) => {
                 router.push(`/inventario/conteo?item=${row.id}`);
               }}
+              onRotura={setRoturaItem}
             />
           ))}
         </div>
@@ -204,6 +205,37 @@ export default function InventarioStockPage() {
             setBanner(e instanceof Error ? e.message : 'No se pudo guardar el ajuste.');
           } finally {
             setAdjustBusy(false);
+          }
+        }}
+      />
+
+      <InventarioRoturaSheet
+        item={roturaItem}
+        open={roturaItem != null}
+        busy={roturaBusy}
+        onClose={() => !roturaBusy && setRoturaItem(null)}
+        onSubmit={async (quantity, detail) => {
+          if (!localId || !roturaItem) return;
+          const supabase = getSupabaseClient();
+          if (!supabase) return;
+          setRoturaBusy(true);
+          setBanner(null);
+          try {
+            await applyManualStockAdjustment(supabase, {
+              localId,
+              inventoryItemId: roturaItem.id,
+              direction: 'out',
+              quantity,
+              movementType: 'breakage',
+              reason: detail || 'Rotura',
+              userId,
+            });
+            setRoturaItem(null);
+            await load();
+          } catch (e) {
+            setBanner(e instanceof Error ? e.message : 'No se pudo registrar la rotura.');
+          } finally {
+            setRoturaBusy(false);
           }
         }}
       />

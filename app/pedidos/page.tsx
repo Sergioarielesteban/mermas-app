@@ -103,6 +103,16 @@ import {
   type PedidosRecepcionSummaryPayload,
 } from '@/lib/pedidos-recepcion-summary-build';
 import {
+  applyPurchaseReceiptToInventory,
+  fetchInventoryLinksBySupplierProductIds,
+} from '@/lib/inventory-pedidos-bridge';
+import {
+  buildReceptionInventorySummary,
+  previewOrderInventoryImpact,
+  receivedQtyForInventoryLine,
+  type InventoryLinkInfo,
+} from '@/lib/inventory-reception-stock-ui';
+import {
   loadRecepcionSummaryLocal,
   metaFromSummaryPayload,
   persistRecepcionSummaryLocal,
@@ -1796,7 +1806,7 @@ export default function PedidosPage() {
             expectedUpdatedAt: snap.updatedAt,
           }).then(() => flushedSnap),
         )
-        .then((flushedSnap) => {
+        .then(async (flushedSnap) => {
           const nowIso = new Date().toISOString();
           const receivedSnap: PedidoOrder = {
             ...flushedSnap,
@@ -1805,6 +1815,58 @@ export default function PedidosPage() {
             priceReviewArchivedAt: undefined,
             updatedAt: nowIso,
           };
+
+          let inventoryStock: PedidosRecepcionSummaryPayload['inventoryStock'];
+          const supInv = getSupabaseClient();
+          if (supInv && localId) {
+            try {
+              const productIds = [
+                ...new Set(
+                  receivedSnap.items
+                    .map((i) => i.supplierProductId)
+                    .filter((id): id is string => Boolean(id?.trim())),
+                ),
+              ];
+              const linkMapRaw = await fetchInventoryLinksBySupplierProductIds(supInv, localId, productIds);
+              const linkByProductId = new Map<string, InventoryLinkInfo>();
+              for (const [pid, link] of linkMapRaw) {
+                linkByProductId.set(pid, {
+                  inventoryItemId: link.inventoryItemId,
+                  name: link.name,
+                  unit: link.unit,
+                });
+              }
+              const receiptLines = receivedSnap.items
+                .filter((i) => i.supplierProductId && receivedQtyForInventoryLine(i) > 0)
+                .map((i) => ({
+                  supplierProductId: i.supplierProductId!,
+                  productName: orderLineDisplayName(i, catalogNameByProductId),
+                  receivedQuantity: receivedQtyForInventoryLine(i),
+                  unit: i.unit,
+                  pricePerUnit: i.pricePerUnit,
+                }));
+              const applyResult = await applyPurchaseReceiptToInventory(supInv, {
+                localId,
+                orderId: receivedSnap.id,
+                lines: receiptLines,
+                userId,
+              });
+              inventoryStock = buildReceptionInventorySummary({
+                order: receivedSnap,
+                linkByProductId,
+                catalogNameByProductId,
+                applyResult,
+              });
+            } catch {
+              inventoryStock = buildReceptionInventorySummary({
+                order: receivedSnap,
+                linkByProductId: inventoryLinkByProductIdRef.current,
+                catalogNameByProductId,
+                applyResult: null,
+              });
+            }
+          }
+
           registerPendingReceivedOrder(orderId, nowIso);
           setOrders((prev) =>
             prev.map((o) =>
@@ -1819,22 +1881,35 @@ export default function PedidosPage() {
             withStack: true,
           });
           setExpandedSentId((id) => (id === orderId ? null : id));
-          setMessage('Pedido marcado como recibido.');
+          let receivedMsg = 'Pedido marcado como recibido.';
+          if (inventoryStock?.stockEntriesApplied) {
+            receivedMsg += ` Stock: ${inventoryStock.stockEntriesApplied} entrada${
+              inventoryStock.stockEntriesApplied === 1 ? '' : 's'
+            } en inventario.`;
+          } else if (inventoryStock && inventoryStock.linkedLineCount === 0 && inventoryStock.unlinkedLineCount > 0) {
+            receivedMsg += ` ${inventoryStock.unlinkedLineCount} línea(s) sin enlace a inventario.`;
+          } else if (inventoryStock && inventoryStock.linkedLineCount === 0) {
+            receivedMsg += ' Sin líneas enlazadas a inventario.';
+          }
+          setMessage(receivedMsg);
           try {
             const inputs = recepcionSummaryInputsRef.current;
-            const summaryPayload = buildPedidosRecepcionSummaryPayload({
-              order: receivedSnap,
-              completedAtIso: nowIso,
-              userDisplayName: actorLabel(displayName, loginUsername),
-              weightInputByItemId: inputs.weightInputByItemId,
-              pricePerKgInputByItemId: inputs.pricePerKgInputByItemId,
-              orderQtyInputByItemId: inputs.orderQtyInputByItemId,
-              priceInputByItemId: inputs.priceInputByItemId,
-              sentOrderPpkSuggestionByItemId: inputs.sentOrderPpkSuggestionByItemId,
-              quickLineMarks: inputs.quickLineMarks,
-              catalogNameByProductId,
-              historicoComparableByProductId: historicoComparableByProductRef.current,
-            });
+            const summaryPayload: PedidosRecepcionSummaryPayload = {
+              ...buildPedidosRecepcionSummaryPayload({
+                order: receivedSnap,
+                completedAtIso: nowIso,
+                userDisplayName: actorLabel(displayName, loginUsername),
+                weightInputByItemId: inputs.weightInputByItemId,
+                pricePerKgInputByItemId: inputs.pricePerKgInputByItemId,
+                orderQtyInputByItemId: inputs.orderQtyInputByItemId,
+                priceInputByItemId: inputs.priceInputByItemId,
+                sentOrderPpkSuggestionByItemId: inputs.sentOrderPpkSuggestionByItemId,
+                quickLineMarks: inputs.quickLineMarks,
+                catalogNameByProductId,
+                historicoComparableByProductId: historicoComparableByProductRef.current,
+              }),
+              inventoryStock,
+            };
             setRecepcionSummaryPayload(summaryPayload);
             requestAnimationFrame(() => setRecepcionSummaryOpen(true));
             if (localId) {
@@ -2027,6 +2102,49 @@ export default function PedidosPage() {
       return raw === todayKey;
     });
   }, [sentOrders, recibirEntregaHoy]);
+
+  const [inventoryLinkByProductId, setInventoryLinkByProductId] = React.useState<
+    Map<string, InventoryLinkInfo>
+  >(new Map());
+  const inventoryLinkByProductIdRef = React.useRef(inventoryLinkByProductId);
+  React.useEffect(() => {
+    inventoryLinkByProductIdRef.current = inventoryLinkByProductId;
+  }, [inventoryLinkByProductId]);
+
+  React.useEffect(() => {
+    if (!localId) {
+      setInventoryLinkByProductId(new Map());
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const productIds = [
+      ...new Set(
+        sentOrders
+          .flatMap((o) => o.items.map((i) => i.supplierProductId))
+          .filter((id): id is string => Boolean(id?.trim())),
+      ),
+    ];
+    if (productIds.length === 0) {
+      setInventoryLinkByProductId(new Map());
+      return;
+    }
+    void fetchInventoryLinksBySupplierProductIds(supabase, localId, productIds)
+      .then((raw) => {
+        const next = new Map<string, InventoryLinkInfo>();
+        for (const [pid, link] of raw) {
+          next.set(pid, {
+            inventoryItemId: link.inventoryItemId,
+            name: link.name,
+            unit: link.unit,
+          });
+        }
+        setInventoryLinkByProductId(next);
+      })
+      .catch(() => {
+        /* badges opcionales; no bloquear recepción */
+      });
+  }, [localId, sentOrders]);
 
   const recibirHoyScrollDoneRef = React.useRef(false);
   React.useEffect(() => {
@@ -3862,6 +3980,7 @@ export default function PedidosPage() {
     });
     const incidentOpen = Boolean(incidentOpenBySentOrderId[order.id]);
     const showExpandHint = opts?.showExpandHint ?? false;
+    const inventoryPreview = previewOrderInventoryImpact(order, inventoryLinkByProductId);
     return (
       <div className="mt-2 w-full touch-manipulation rounded-2xl border border-zinc-200/85 bg-white px-2.5 py-2.5 shadow-[0_3px_14px_rgba(24,24,27,0.06)] ring-1 ring-zinc-100/80">
         <div className="space-y-2 text-left">
@@ -3871,6 +3990,22 @@ export default function PedidosPage() {
           </p>
         ) : (
           <>
+            {inventoryPreview.linkedLineCount > 0 || inventoryPreview.unlinkedLineCount > 0 ? (
+              <p className="rounded-xl border border-zinc-200/80 bg-zinc-50/80 px-2 py-1.5 text-[10px] leading-snug text-zinc-700 ring-1 ring-zinc-100/80">
+                {inventoryPreview.linkedLineCount > 0 ? (
+                  <span className="font-bold text-emerald-800">
+                    Al validar: {inventoryPreview.linkedLineCount} entrada
+                    {inventoryPreview.linkedLineCount === 1 ? '' : 's'} de stock
+                  </span>
+                ) : null}
+                {inventoryPreview.linkedLineCount > 0 && inventoryPreview.unlinkedLineCount > 0 ? ' · ' : null}
+                {inventoryPreview.unlinkedLineCount > 0 ? (
+                  <span className="font-semibold text-zinc-600">
+                    {inventoryPreview.unlinkedLineCount} sin enlace inventario
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
             <div className="grid grid-cols-[1fr_0.82fr] gap-2">
               <button
                 type="button"
@@ -4800,6 +4935,8 @@ export default function PedidosPage() {
                       item.basePricePerUnit != null && Number.isFinite(item.basePricePerUnit)
                         ? `${item.basePricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
                         : null;
+                    const invProductId = item.supplierProductId?.trim() ?? '';
+                    const invLink = invProductId ? inventoryLinkByProductId.get(invProductId) : null;
                     return (
                       <div key={item.id} className="space-y-1">
                         <PedidosRecepcionSwipeRow
@@ -4827,6 +4964,19 @@ export default function PedidosPage() {
 	                                <p className="text-[12px] font-black leading-tight text-zinc-950 [overflow-wrap:anywhere]">
 	                                  {lineLabel(item)}
 	                                </p>
+	                                {invProductId ? (
+	                                  <span
+	                                    className={[
+	                                      'mt-0.5 inline-flex max-w-full items-center truncate rounded-md px-1 py-px text-[8px] font-bold uppercase tracking-wide ring-1',
+	                                      invLink
+	                                        ? 'bg-emerald-50 text-emerald-900 ring-emerald-200/80'
+	                                        : 'bg-zinc-100 text-zinc-600 ring-zinc-200/80',
+	                                    ].join(' ')}
+	                                    title={invLink ? `Entrada en inventario: ${invLink.name}` : 'No enlazado a inventario'}
+	                                  >
+	                                    {invLink ? `Stock · ${invLink.name}` : 'Sin enlace stock'}
+	                                  </span>
+	                                ) : null}
 	                              </div>
 	                              <div className="shrink-0 self-center text-right leading-tight">
                                 <p className="text-[10.5px] font-black tabular-nums text-zinc-700">

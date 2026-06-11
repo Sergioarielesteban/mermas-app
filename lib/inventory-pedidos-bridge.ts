@@ -96,3 +96,37 @@ export async function countInventoryLinksForSupplierProducts(
   if (error) throw new Error(error.message);
   return count ?? 0;
 }
+
+export type InventorySupplierProductLink = {
+  inventoryItemId: string;
+  name: string;
+  unit: string;
+};
+
+/** Lectura: mapa producto proveedor → línea de inventario enlazada. */
+export async function fetchInventoryLinksBySupplierProductIds(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierProductIds: string[],
+): Promise<Map<string, InventorySupplierProductLink>> {
+  const out = new Map<string, InventorySupplierProductLink>();
+  const ids = [...new Set(supplierProductIds.filter(Boolean))];
+  if (ids.length === 0) return out;
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .select('id,name,unit,supplier_product_id')
+    .eq('local_id', localId)
+    .eq('is_active', true)
+    .in('supplier_product_id', ids);
+  if (error) throw new Error(error.message);
+  for (const row of data ?? []) {
+    const pid = row.supplier_product_id != null ? String(row.supplier_product_id) : '';
+    if (!pid) continue;
+    out.set(pid, {
+      inventoryItemId: String(row.id),
+      name: String(row.name),
+      unit: String(row.unit),
+    });
+  }
+  return out;
+}

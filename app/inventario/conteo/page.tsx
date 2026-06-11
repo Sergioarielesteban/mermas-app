@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
@@ -13,7 +13,14 @@ import {
   startInventoryCountSession,
   type InventoryStockRow,
 } from '@/lib/inventory-operations-supabase';
-import { formatStockQuantity, parseStockDecimal } from '@/lib/inventory-stock-format';
+import { formatStockQuantity, labelInventoryUnit, parseStockDecimal } from '@/lib/inventory-stock-format';
+
+type SessionDiff = {
+  itemId: string;
+  name: string;
+  unit: string;
+  diff: number;
+};
 
 export default function InventarioConteoPage() {
   const router = useRouter();
@@ -24,11 +31,14 @@ export default function InventarioConteoPage() {
   const [index, setIndex] = React.useState(0);
   const [countedQty, setCountedQty] = React.useState('');
   const [reason, setReason] = React.useState('');
+  const [sessionReason, setSessionReason] = React.useState('Conteo semanal');
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
   const [banner, setBanner] = React.useState<string | null>(null);
   const [countSessionId, setCountSessionId] = React.useState<string | null>(null);
-  const [savedCount, setSavedCount] = React.useState(0);
+  const [reviewedIds, setReviewedIds] = React.useState<Set<string>>(() => new Set());
+  const [sessionDiffs, setSessionDiffs] = React.useState<SessionDiff[]>([]);
+  const [showSummary, setShowSummary] = React.useState(false);
 
   React.useEffect(() => {
     if (!localId || !isSupabaseEnabled() || !profileReady) {
@@ -62,16 +72,30 @@ export default function InventarioConteoPage() {
   const diff =
     parsedCounted != null && current ? Math.round((parsedCounted - systemQty) * 1000) / 1000 : null;
 
+  const reviewedCount = reviewedIds.size;
+  const progressPct = items.length > 0 ? Math.round((reviewedCount / items.length) * 100) : 0;
+
   React.useEffect(() => {
     setCountedQty('');
-    setReason('');
+    if (!current?.id || !reviewedIds.has(current.id)) setReason('');
   }, [current?.id]);
+
+  const markReviewed = (itemId: string) => {
+    setReviewedIds((prev) => new Set(prev).add(itemId));
+  };
 
   const goNext = () => {
     if (index < items.length - 1) setIndex((i) => i + 1);
   };
   const goPrev = () => {
     if (index > 0) setIndex((i) => i - 1);
+  };
+
+  const markMatchesAndNext = () => {
+    if (!current || busy) return;
+    markReviewed(current.id);
+    setBanner(null);
+    goNext();
   };
 
   const saveCurrent = async (advance: boolean) => {
@@ -89,12 +113,17 @@ export default function InventarioConteoPage() {
         localId,
         inventoryItemId: current.id,
         countedQuantity: parsedCounted,
-        reason: reason.trim() || 'Conteo rápido',
+        reason: reason.trim() || sessionReason.trim() || 'Conteo rápido',
         countSessionId,
         userId,
       });
+      markReviewed(current.id);
       if (mov) {
-        setSavedCount((c) => c + 1);
+        const delta = Math.round((parsedCounted - systemQty) * 1000) / 1000;
+        setSessionDiffs((prev) => [
+          ...prev.filter((d) => d.itemId !== current.id),
+          { itemId: current.id, name: current.name, unit: current.unit, diff: delta },
+        ]);
         setItems((prev) =>
           prev.map((row) =>
             row.id === current.id
@@ -117,7 +146,7 @@ export default function InventarioConteoPage() {
       const supabase = getSupabaseClient();
       if (supabase) await completeInventoryCountSession(supabase, localId, countSessionId);
     }
-    router.push('/inventario');
+    setShowSummary(true);
   };
 
   if (loading) {
@@ -142,14 +171,80 @@ export default function InventarioConteoPage() {
     );
   }
 
+  if (showSummary) {
+    return (
+      <div className="min-w-0 space-y-2 sm:space-y-2.5">
+        <section className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100/80">
+          <h2 className="text-[14px] font-black text-zinc-950">Conteo terminado</h2>
+          <dl className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+            <div className="rounded-2xl bg-zinc-50 px-2 py-2 ring-1 ring-zinc-100">
+              <dt className="text-[9px] font-bold uppercase text-zinc-500">Revisados</dt>
+              <dd className="font-black tabular-nums text-zinc-900">{reviewedCount}</dd>
+            </div>
+            <div className="rounded-2xl bg-amber-50/80 px-2 py-2 ring-1 ring-amber-100">
+              <dt className="text-[9px] font-bold uppercase text-zinc-500">Diferencias</dt>
+              <dd className="font-black tabular-nums text-zinc-900">{sessionDiffs.length}</dd>
+            </div>
+          </dl>
+        </section>
+
+        {sessionDiffs.length > 0 ? (
+          <ul className="space-y-1">
+            {sessionDiffs.map((d) => (
+              <li
+                key={d.itemId}
+                className="flex items-center justify-between gap-2 rounded-2xl border border-zinc-200/70 bg-white px-2.5 py-2 text-[12px] ring-1 ring-zinc-100/80"
+              >
+                <span className="min-w-0 truncate font-semibold text-zinc-900">{d.name}</span>
+                <span className="shrink-0 font-mono font-bold tabular-nums text-zinc-800">
+                  {d.diff > 0 ? '+' : ''}
+                  {d.diff} {labelInventoryUnit(d.unit)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="rounded-2xl border border-emerald-200/80 bg-emerald-50/60 px-3 py-3 text-center text-[12px] font-medium text-emerald-900 ring-1 ring-emerald-100">
+            Sin diferencias en esta sesión. Todo cuadraba o se verificó con ✓ Coincide.
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => router.push('/inventario')}
+          className="min-h-[36px] w-full rounded-2xl bg-[#D32F2F] text-[11px] font-bold text-white"
+        >
+          Volver a stock
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="min-w-0 space-y-2 sm:space-y-2.5">
-      <div className="flex items-center justify-between text-[11px] font-semibold text-zinc-600">
-        <span>
-          Producto {index + 1} / {items.length}
-        </span>
-        <span>{savedCount} ajustes</span>
-      </div>
+      <section className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-2 shadow-sm ring-1 ring-zinc-100/80">
+        <div className="flex items-center justify-between text-[11px] font-semibold text-zinc-600">
+          <span>
+            {reviewedCount} / {items.length} productos
+          </span>
+          <span>{progressPct}%</span>
+        </div>
+        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-zinc-100 ring-1 ring-zinc-200/60">
+          <div
+            className="h-full rounded-full bg-[#D32F2F] transition-[width] duration-300"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+        <label className="mt-2 block">
+          <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Motivo de sesión</span>
+          <input
+            type="text"
+            value={sessionReason}
+            onChange={(e) => setSessionReason(e.target.value)}
+            className="mt-0.5 h-8 w-full rounded-xl border border-zinc-200/80 px-2 text-[12px] ring-1 ring-zinc-200/70"
+          />
+        </label>
+      </section>
 
       {banner ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-950 ring-1 ring-amber-100">
@@ -186,31 +281,42 @@ export default function InventarioConteoPage() {
             </div>
           </div>
 
+          <button
+            type="button"
+            disabled={busy}
+            onClick={markMatchesAndNext}
+            className="mt-2.5 inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-2xl border border-emerald-300/80 bg-emerald-50 text-[12px] font-black text-emerald-900 ring-1 ring-emerald-200/70 disabled:opacity-45"
+          >
+            <Check className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+            Coincide — siguiente
+          </button>
+
           <label className="mt-2.5 block">
-            <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Stock real</span>
+            <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Stock real (solo si difiere)</span>
             <input
               type="text"
               inputMode="decimal"
-              autoFocus
               value={countedQty}
               onChange={(e) => setCountedQty(e.target.value)}
               disabled={busy}
               className="mt-1 h-11 w-full rounded-2xl border border-zinc-200/80 px-3 text-[18px] font-bold tabular-nums text-zinc-900 ring-1 ring-zinc-200/70"
-              placeholder="0"
+              placeholder="Solo si no coincide"
             />
           </label>
 
-          <label className="mt-2 block">
-            <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Motivo</span>
-            <input
-              type="text"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              disabled={busy}
-              className="mt-1 h-9 w-full rounded-2xl border border-zinc-200/80 px-2.5 text-[13px] ring-1 ring-zinc-200/70"
-              placeholder="Conteo de turno…"
-            />
-          </label>
+          {parsedCounted != null && diff != null && diff !== 0 ? (
+            <label className="mt-2 block">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Motivo del ajuste</span>
+              <input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                disabled={busy}
+                className="mt-1 h-9 w-full rounded-2xl border border-zinc-200/80 px-2.5 text-[13px] ring-1 ring-zinc-200/70"
+                placeholder={sessionReason || 'Conteo de turno…'}
+              />
+            </label>
+          ) : null}
 
           <div className="mt-2.5 grid grid-cols-2 gap-1.5">
             <button
@@ -223,23 +329,14 @@ export default function InventarioConteoPage() {
             </button>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || parsedCounted == null}
               onClick={() => void saveCurrent(true)}
               className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-2xl bg-[#D32F2F] text-[10px] font-bold text-white disabled:opacity-45"
             >
-              {busy ? 'Guardando…' : 'Guardar →'}
+              {busy ? 'Guardando…' : 'Guardar diff →'}
               <ChevronRight className="h-3.5 w-3.5" aria-hidden />
             </button>
           </div>
-
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void saveCurrent(false)}
-            className="mt-1.5 min-h-[34px] w-full rounded-2xl border border-zinc-200 bg-white text-[10px] font-bold text-zinc-700 disabled:opacity-45"
-          >
-            Guardar sin avanzar
-          </button>
         </div>
       ) : null}
 

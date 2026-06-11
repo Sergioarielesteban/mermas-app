@@ -57,6 +57,8 @@ export type PedidosRecepcionSummaryPayload = {
   linesToMonitorCount: number;
   /** Opcional: versión del snapshot persistido */
   snapshotVersion?: number;
+  /** Resumen operativo de impacto en inventario tras validar recepción */
+  inventoryStock?: import('@/lib/inventory-reception-stock-ui').PedidosRecepcionInventorySummary;
 };
 
 const SNAPSHOT_VERSION = 1;
@@ -151,6 +153,49 @@ export function parsePedidosRecepcionSummaryPayload(raw: unknown): PedidosRecepc
         ? raw.weeklyPurchasesHint
         : null;
 
+  let inventoryStock: PedidosRecepcionSummaryPayload['inventoryStock'];
+  const invRaw = raw.inventoryStock;
+  if (isRecord(invRaw)) {
+    const linkedLines: NonNullable<PedidosRecepcionSummaryPayload['inventoryStock']>['linkedLines'] = [];
+    const unlinkedLines: NonNullable<PedidosRecepcionSummaryPayload['inventoryStock']>['unlinkedLines'] = [];
+    if (Array.isArray(invRaw.linkedLines)) {
+      for (const row of invRaw.linkedLines) {
+        if (!isRecord(row)) continue;
+        const label = typeof row.label === 'string' ? row.label : '';
+        const qtyLabel = typeof row.qtyLabel === 'string' ? row.qtyLabel : '—';
+        const inventoryName = typeof row.inventoryName === 'string' ? row.inventoryName : '';
+        linkedLines.push({ label, qtyLabel, inventoryName, applied: row.applied === true });
+      }
+    }
+    if (Array.isArray(invRaw.unlinkedLines)) {
+      for (const row of invRaw.unlinkedLines) {
+        if (!isRecord(row)) continue;
+        const label = typeof row.label === 'string' ? row.label : '';
+        const qtyLabel = typeof row.qtyLabel === 'string' ? row.qtyLabel : '—';
+        unlinkedLines.push({ label, qtyLabel });
+      }
+    }
+    const linkedLineCount = num(invRaw.linkedLineCount);
+    const unlinkedLineCount = num(invRaw.unlinkedLineCount);
+    const stockEntriesApplied = num(invRaw.stockEntriesApplied);
+    const stockEntriesSkipped = num(invRaw.stockEntriesSkipped);
+    if (
+      linkedLineCount != null &&
+      unlinkedLineCount != null &&
+      stockEntriesApplied != null &&
+      stockEntriesSkipped != null
+    ) {
+      inventoryStock = {
+        linkedLineCount,
+        unlinkedLineCount,
+        stockEntriesApplied,
+        stockEntriesSkipped,
+        linkedLines,
+        unlinkedLines,
+      };
+    }
+  }
+
   return {
     orderId,
     orderLabel,
@@ -170,6 +215,7 @@ export function parsePedidosRecepcionSummaryPayload(raw: unknown): PedidosRecepc
     productsWithIncidentCount,
     linesToMonitorCount,
     snapshotVersion: SNAPSHOT_VERSION,
+    inventoryStock,
   };
 }
 

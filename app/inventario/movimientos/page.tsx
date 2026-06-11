@@ -12,6 +12,35 @@ import {
   type InventoryMovementWithItem,
   type InventoryStockRow,
 } from '@/lib/inventory-operations-supabase';
+import {
+  filterMovementsForConsult,
+  type MovementConsultFilter,
+} from '@/lib/inventory-movement-filters';
+
+function FilterChip({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 transition',
+        active
+          ? 'bg-[#FFF7F5] text-[#B91C1C] ring-[#D32F2F]/20'
+          : 'bg-white text-zinc-700 ring-zinc-200/80 hover:bg-zinc-50',
+      ].join(' ')}
+    >
+      {label}
+    </button>
+  );
+}
 
 export default function InventarioMovimientosPage() {
   const searchParams = useSearchParams();
@@ -20,6 +49,8 @@ export default function InventarioMovimientosPage() {
   const [movements, setMovements] = React.useState<InventoryMovementWithItem[]>([]);
   const [items, setItems] = React.useState<InventoryStockRow[]>([]);
   const [selectedItemId, setSelectedItemId] = React.useState<string>(itemFilter ?? '');
+  const [typeFilter, setTypeFilter] = React.useState<MovementConsultFilter>('all');
+  const [thisWeekOnly, setThisWeekOnly] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [banner, setBanner] = React.useState<string | null>(null);
 
@@ -59,6 +90,11 @@ export default function InventarioMovimientosPage() {
     void load();
   }, [profileReady, load]);
 
+  const filteredMovements = React.useMemo(
+    () => filterMovementsForConsult(movements, { typeFilter, thisWeekOnly }),
+    [movements, typeFilter, thisWeekOnly],
+  );
+
   const selectedName = items.find((i) => i.id === selectedItemId)?.name;
 
   return (
@@ -70,7 +106,15 @@ export default function InventarioMovimientosPage() {
       ) : null}
 
       <section className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100/80">
-        <label className="block">
+        <div className="flex flex-wrap gap-1.5">
+          <FilterChip active={typeFilter === 'all'} label="Todos" onClick={() => setTypeFilter('all')} />
+          <FilterChip active={typeFilter === 'in'} label="Entradas" onClick={() => setTypeFilter('in')} />
+          <FilterChip active={typeFilter === 'out'} label="Salidas" onClick={() => setTypeFilter('out')} />
+          <FilterChip active={typeFilter === 'count'} label="Conteos" onClick={() => setTypeFilter('count')} />
+          <FilterChip active={thisWeekOnly} label="Esta semana" onClick={() => setThisWeekOnly((v) => !v)} />
+        </div>
+
+        <label className="mt-2 block">
           <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Producto</span>
           <select
             value={selectedItemId}
@@ -90,9 +134,20 @@ export default function InventarioMovimientosPage() {
             Filtrando: <span className="font-bold text-zinc-800">{selectedName}</span>
           </p>
         ) : null}
+        {!loading ? (
+          <p className="mt-1 text-[10px] text-zinc-500">{filteredMovements.length} movimientos visibles</p>
+        ) : null}
       </section>
 
-      <InventarioMovementTimeline movements={movements} loading={loading} />
+      <InventarioMovementTimeline
+        movements={filteredMovements}
+        loading={loading}
+        emptyMessage={
+          typeFilter !== 'all' || thisWeekOnly
+            ? 'Ningún movimiento con estos filtros.'
+            : 'Aún no hay movimientos registrados.'
+        }
+      />
 
       <div className="flex justify-center pt-1">
         <Link href="/inventario" className="text-[11px] font-bold text-zinc-600">
