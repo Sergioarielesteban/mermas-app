@@ -68,13 +68,13 @@ export default function InventarioAdjustSheet({ item, open, busy, onClose, onSub
     <div className="fixed inset-0 z-[140] flex items-end justify-center p-3 sm:items-center" role="dialog" aria-modal="true">
       <button type="button" className="absolute inset-0 bg-black/45" aria-label="Cerrar" onClick={() => !busy && onClose()} />
       <div className="relative w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-4 shadow-xl">
-        <h3 className="text-sm font-bold text-zinc-900">Ajustar stock</h3>
-        <p className="mt-1 truncate text-xs text-zinc-500">{item.name}</p>
-        <p className="mt-2 text-lg font-extrabold tabular-nums text-zinc-900">
+        <h3 className="text-[14px] font-black text-zinc-950">Ajustar stock</h3>
+        <p className="mt-0.5 truncate text-[11px] text-zinc-500">{item.name}</p>
+        <p className="mt-1.5 font-mono text-[15px] font-bold tabular-nums text-zinc-900">
           Actual: {formatStockQuantity(item.quantity_on_hand, item.unit)}
         </p>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="mt-3 grid grid-cols-2 gap-2">
           {(['in', 'out'] as const).map((d) => (
             <button
               key={d}
@@ -82,8 +82,10 @@ export default function InventarioAdjustSheet({ item, open, busy, onClose, onSub
               disabled={busy}
               onClick={() => setDirection(d)}
               className={[
-                'h-10 rounded-xl text-xs font-bold',
-                direction === d ? 'bg-zinc-900 text-white' : 'border border-zinc-200 bg-zinc-50 text-zinc-700',
+                'h-9 rounded-2xl text-[11px] font-bold ring-1 transition',
+                direction === d
+                  ? 'bg-[#FFF7F5] text-[#B91C1C] ring-[#D32F2F]/20'
+                  : 'border border-zinc-200/80 bg-white text-zinc-700 ring-zinc-200/70',
               ].join(' ')}
             >
               {d === 'in' ? '+ Entrada' : '− Salida'}
@@ -91,15 +93,15 @@ export default function InventarioAdjustSheet({ item, open, busy, onClose, onSub
           ))}
         </div>
 
-        <label className="mt-4 block">
-          <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">Cantidad ({labelInventoryUnit(item.unit)})</span>
+        <label className="mt-3 block">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Cantidad ({labelInventoryUnit(item.unit)})</span>
           <input
             type="text"
             inputMode="decimal"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             disabled={busy}
-            className="mt-1 h-11 w-full rounded-xl border border-zinc-200 px-3 text-lg font-bold tabular-nums text-zinc-900"
+            className="mt-1 h-10 w-full rounded-2xl border border-zinc-200/80 px-3 text-[15px] font-bold tabular-nums text-zinc-900 ring-1 ring-zinc-200/70"
             placeholder="0"
           />
         </label>

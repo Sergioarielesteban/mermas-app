@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowDownLeft, ArrowUpRight, ClipboardList, History, SlidersHorizontal } from 'lucide-react';
+import { ClipboardList, History, SlidersHorizontal } from 'lucide-react';
 import type { InventoryMovement } from '@/lib/inventory-operations-supabase';
 import { MOVEMENT_TYPE_LABELS } from '@/lib/inventory-operations-supabase';
 import type { InventoryStockRow } from '@/lib/inventory-operations-supabase';
@@ -23,23 +23,31 @@ type Props = {
 
 export default function InventarioStockCard({ item, lastMovement, onAdjust, onCount }: Props) {
   const status = resolveStockStatus(item.quantity_on_hand, item.min_stock);
+  const unitLabel = labelInventoryUnit(item.unit);
+  const supplierLine = item.supplierProductId ? 'Proveedor enlazado' : 'Sin proveedor';
   const price =
     item.price_per_unit > 0
       ? `${item.price_per_unit.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${labelInventoryUnit(item.unidadCoste)}`
       : null;
+  const movementLine = lastMovement
+    ? `${MOVEMENT_TYPE_LABELS[lastMovement.movement_type] ?? 'Mov.'} · ${formatRelativeShort(lastMovement.occurred_at)}`
+    : 'Sin movimientos';
+
+  const secondaryBits = [price, movementLine, item.supplierProductId ? 'Pedidos activo' : null].filter(Boolean);
 
   return (
-    <article className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200/80">
-      <div className="flex items-start justify-between gap-3">
+    <article className="rounded-2xl border border-zinc-200/70 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100/80">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-base font-bold text-zinc-900">{item.name}</h3>
-          {item.format_label ? (
-            <p className="mt-0.5 truncate text-[11px] font-medium text-zinc-500">{item.format_label}</p>
-          ) : null}
+          <h3 className="truncate text-[14px] font-black leading-tight text-zinc-950">{item.name}</h3>
+          <p className="mt-0.5 truncate text-[10px] font-medium text-zinc-500">
+            {supplierLine} · {unitLabel}
+            {item.format_label ? ` · ${item.format_label}` : ''}
+          </p>
         </div>
         <span
           className={[
-            'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1',
+            'shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ring-1',
             STOCK_STATUS_BADGE[status],
           ].join(' ')}
         >
@@ -47,62 +55,37 @@ export default function InventarioStockCard({ item, lastMovement, onAdjust, onCo
         </span>
       </div>
 
-      <p className="mt-3 text-3xl font-extrabold tabular-nums tracking-tight text-zinc-900">
+      <p className="mt-1.5 font-mono text-[17px] font-bold tabular-nums leading-none text-zinc-900">
         {formatStockQuantity(item.quantity_on_hand, item.unit)}
       </p>
 
-      <dl className="mt-3 space-y-1 text-[11px] text-zinc-600">
-        {price ? (
-          <div className="flex justify-between gap-2">
-            <dt className="text-zinc-500">Último precio</dt>
-            <dd className="font-semibold text-zinc-800">{price}</dd>
-          </div>
-        ) : null}
-        {lastMovement ? (
-          <div className="flex justify-between gap-2">
-            <dt className="text-zinc-500">Último movimiento</dt>
-            <dd className="truncate text-right font-semibold text-zinc-800">
-              {MOVEMENT_TYPE_LABELS[lastMovement.movement_type] ?? 'Movimiento'} ·{' '}
-              {formatRelativeShort(lastMovement.occurred_at)}
-            </dd>
-          </div>
-        ) : (
-          <div className="flex justify-between gap-2">
-            <dt className="text-zinc-500">Último movimiento</dt>
-            <dd className="font-medium text-zinc-400">Sin movimientos</dd>
-          </div>
-        )}
-        {item.supplierId ? (
-          <div className="flex justify-between gap-2">
-            <dt className="text-zinc-500">Enlace proveedor</dt>
-            <dd className="font-semibold text-emerald-700">Activo</dd>
-          </div>
-        ) : null}
-      </dl>
+      {secondaryBits.length > 0 ? (
+        <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-zinc-500">{secondaryBits.join(' · ')}</p>
+      ) : null}
 
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className="mt-2 grid grid-cols-3 gap-1.5">
         <button
           type="button"
           onClick={() => onAdjust(item)}
-          className="inline-flex h-10 items-center justify-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50 text-[11px] font-bold text-zinc-800 active:bg-zinc-100"
+          className="inline-flex min-h-[34px] items-center justify-center gap-1 rounded-2xl border border-zinc-200 bg-white px-1.5 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50"
         >
-          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+          <SlidersHorizontal className="h-3 w-3 shrink-0" aria-hidden />
           Ajustar
         </button>
         <button
           type="button"
           onClick={() => onCount(item)}
-          className="inline-flex h-10 items-center justify-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50 text-[11px] font-bold text-zinc-800 active:bg-zinc-100"
+          className="inline-flex min-h-[34px] items-center justify-center gap-1 rounded-2xl border border-zinc-200 bg-white px-1.5 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50"
         >
-          <ClipboardList className="h-3.5 w-3.5" aria-hidden />
+          <ClipboardList className="h-3 w-3 shrink-0" aria-hidden />
           Contar
         </button>
         <Link
           href={`/inventario/movimientos?item=${item.id}`}
-          className="inline-flex h-10 items-center justify-center gap-1 rounded-xl border border-zinc-200 bg-white text-[11px] font-bold text-zinc-800 hover:bg-zinc-50"
+          className="inline-flex min-h-[34px] items-center justify-center gap-1 rounded-2xl border border-zinc-200 bg-white px-1.5 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50"
         >
-          <History className="h-3.5 w-3.5" aria-hidden />
-          Ver
+          <History className="h-3 w-3 shrink-0" aria-hidden />
+          Movim.
         </Link>
       </div>
     </article>
@@ -110,8 +93,15 @@ export default function InventarioStockCard({ item, lastMovement, onAdjust, onCo
 }
 
 export function InventarioMovementIcon({ delta }: { delta: number }) {
-  if (delta >= 0) {
-    return <ArrowDownLeft className="h-4 w-4 text-emerald-600" aria-hidden />;
-  }
-  return <ArrowUpRight className="h-4 w-4 text-amber-700" aria-hidden />;
+  return (
+    <span
+      className={[
+        'text-[11px] font-black tabular-nums',
+        delta >= 0 ? 'text-emerald-700' : 'text-amber-800',
+      ].join(' ')}
+      aria-hidden
+    >
+      {delta >= 0 ? '+' : '−'}
+    </span>
+  );
 }

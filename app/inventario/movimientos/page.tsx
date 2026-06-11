@@ -3,7 +3,6 @@
 import React from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import ModuleHeader from '@/components/ModuleHeader';
 import InventarioMovementTimeline from '@/components/inventario/InventarioMovementTimeline';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -63,22 +62,20 @@ export default function InventarioMovimientosPage() {
   const selectedName = items.find((i) => i.id === selectedItemId)?.name;
 
   return (
-    <div className="space-y-4">
-      <ModuleHeader title="Movimientos" dense />
-
+    <div className="space-y-2 sm:space-y-2.5">
       {banner ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-950 ring-1 ring-amber-100">
           {banner}
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+      <section className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100/80">
         <label className="block">
-          <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">Filtrar por producto</span>
+          <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Producto</span>
           <select
             value={selectedItemId}
             onChange={(e) => setSelectedItemId(e.target.value)}
-            className="mt-1 h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900"
+            className="mt-1 h-9 w-full rounded-2xl border border-zinc-200/80 bg-white px-2.5 text-[13px] font-semibold text-zinc-900 shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70"
           >
             <option value="">Todos los productos</option>
             {items.map((item) => (
@@ -89,17 +86,17 @@ export default function InventarioMovimientosPage() {
           </select>
         </label>
         {selectedName ? (
-          <p className="mt-2 text-xs text-zinc-600">
-            Mostrando movimientos de <span className="font-bold text-zinc-900">{selectedName}</span>
+          <p className="mt-1.5 text-[10px] text-zinc-500">
+            Filtrando: <span className="font-bold text-zinc-800">{selectedName}</span>
           </p>
         ) : null}
-      </div>
+      </section>
 
       <InventarioMovementTimeline movements={movements} loading={loading} />
 
-      <div className="flex justify-center pt-2">
-        <Link href="/inventario" className="text-xs font-bold text-zinc-600 underline">
-          Volver a stock
+      <div className="flex justify-center pt-1">
+        <Link href="/inventario" className="text-[11px] font-bold text-zinc-600">
+          ← Volver a stock
         </Link>
       </div>
     </div>

@@ -13,7 +13,6 @@ import {
   RotateCcw,
   Trash2,
 } from 'lucide-react';
-import ModuleHeader from '@/components/ModuleHeader';
 import InventoryResultadoInventario from '@/components/InventoryResultadoInventario';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
@@ -1848,9 +1847,7 @@ export default function InventarioPage() {
   const editDisabled = disabled || inventoryEditLocked;
 
   return (
-    <div className="space-y-5">
-      <ModuleHeader title="Valoración" />
-
+    <div className="space-y-2 sm:space-y-2.5">
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           Configura Supabase en la app para usar inventario.
@@ -1875,7 +1872,7 @@ export default function InventarioPage() {
 
       {inventorySaveFlash ? (
         <div
-          className="pointer-events-none fixed bottom-4 left-1/2 z-[140] max-w-[min(92vw,18rem)] -translate-x-1/2 rounded-lg border border-emerald-300/80 bg-emerald-950 px-3 py-2 text-center text-[11px] font-semibold text-emerald-50 shadow-lg"
+          className="pointer-events-none fixed bottom-4 left-1/2 z-[140] max-w-[min(92vw,18rem)] -translate-x-1/2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-[11px] font-semibold text-emerald-900 shadow-sm ring-1 ring-emerald-100"
           role="status"
         >
           {inventorySaveFlash}
@@ -1932,7 +1929,7 @@ export default function InventarioPage() {
                     type="button"
                     disabled={disabled || pdfBusy || lines.length === 0}
                     onClick={() => void handleDownloadMonthlyPdf()}
-                    className="inline-flex h-9 items-center justify-center gap-1 rounded-lg bg-zinc-900 px-2 text-[11px] font-bold text-white ring-1 ring-zinc-700 disabled:opacity-45"
+                    className="inline-flex h-9 items-center justify-center gap-1 rounded-2xl border border-zinc-200/80 bg-white px-2 text-[11px] font-bold text-zinc-800 shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70 disabled:opacity-45"
                   >
                     <FileDown className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">{pdfBusy ? 'PDF…' : 'PDF mensual'}</span>
@@ -1973,7 +1970,7 @@ export default function InventarioPage() {
                     if (first) setNewArticleCategoryId(first.id);
                     setShowAddArticle(true);
                   }}
-                  className="inline-flex h-7 items-center gap-0.5 rounded-md border border-zinc-900 bg-zinc-900 px-2 text-[10px] font-bold uppercase tracking-wide text-white disabled:opacity-45"
+                  className="inline-flex h-7 items-center gap-0.5 rounded-2xl border border-[#D32F2F]/25 bg-[#FFF7F5] px-2 text-[10px] font-bold uppercase tracking-wide text-[#B91C1C] ring-1 ring-[#D32F2F]/15 disabled:opacity-45"
                 >
                   <Plus className="h-3 w-3" />
                   Artículo
