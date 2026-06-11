@@ -5,7 +5,7 @@ import InventarioSubnav from '@/components/inventario/InventarioSubnav';
 
 export default function InventarioLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto max-w-6xl space-y-2 px-3 py-3 sm:space-y-2.5 sm:px-4 sm:py-4">
+    <div className="min-w-0 w-full max-w-full overflow-x-clip space-y-2 py-1 sm:space-y-2.5 sm:py-2">
       <InventarioSubnav />
       {children}
     </div>

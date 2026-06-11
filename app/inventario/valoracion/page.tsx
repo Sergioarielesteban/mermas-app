@@ -1847,7 +1847,7 @@ export default function InventarioPage() {
   const editDisabled = disabled || inventoryEditLocked;
 
   return (
-    <div className="space-y-2 sm:space-y-2.5">
+    <div className="min-w-0 space-y-2 sm:space-y-2.5">
       {!isSupabaseEnabled() || !getSupabaseClient() ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           Configura Supabase en la app para usar inventario.

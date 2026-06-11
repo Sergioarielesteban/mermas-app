@@ -36,7 +36,7 @@ export default function InventarioStockCard({ item, lastMovement, onAdjust, onCo
   const secondaryBits = [price, movementLine, item.supplierProductId ? 'Pedidos activo' : null].filter(Boolean);
 
   return (
-    <article className="rounded-2xl border border-zinc-200/70 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100/80">
+    <article className="min-w-0 overflow-hidden rounded-2xl border border-zinc-200/70 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100/80">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[14px] font-black leading-tight text-zinc-950">{item.name}</h3>
@@ -63,29 +63,29 @@ export default function InventarioStockCard({ item, lastMovement, onAdjust, onCo
         <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-zinc-500">{secondaryBits.join(' · ')}</p>
       ) : null}
 
-      <div className="mt-2 grid grid-cols-3 gap-1.5">
+      <div className="mt-2 grid min-w-0 grid-cols-3 gap-1">
         <button
           type="button"
           onClick={() => onAdjust(item)}
-          className="inline-flex min-h-[34px] items-center justify-center gap-1 rounded-2xl border border-zinc-200 bg-white px-1.5 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50"
+          className="inline-flex min-h-[34px] min-w-0 items-center justify-center gap-0.5 rounded-2xl border border-zinc-200 bg-white px-1 text-[9px] font-bold text-zinc-700 transition hover:bg-zinc-50 sm:gap-1 sm:px-1.5 sm:text-[10px]"
         >
           <SlidersHorizontal className="h-3 w-3 shrink-0" aria-hidden />
-          Ajustar
+          <span className="truncate">Ajustar</span>
         </button>
         <button
           type="button"
           onClick={() => onCount(item)}
-          className="inline-flex min-h-[34px] items-center justify-center gap-1 rounded-2xl border border-zinc-200 bg-white px-1.5 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50"
+          className="inline-flex min-h-[34px] min-w-0 items-center justify-center gap-0.5 rounded-2xl border border-zinc-200 bg-white px-1 text-[9px] font-bold text-zinc-700 transition hover:bg-zinc-50 sm:gap-1 sm:px-1.5 sm:text-[10px]"
         >
           <ClipboardList className="h-3 w-3 shrink-0" aria-hidden />
-          Contar
+          <span className="truncate">Contar</span>
         </button>
         <Link
           href={`/inventario/movimientos?item=${item.id}`}
-          className="inline-flex min-h-[34px] items-center justify-center gap-1 rounded-2xl border border-zinc-200 bg-white px-1.5 text-[10px] font-bold text-zinc-700 transition hover:bg-zinc-50"
+          className="inline-flex min-h-[34px] min-w-0 items-center justify-center gap-0.5 rounded-2xl border border-zinc-200 bg-white px-1 text-[9px] font-bold text-zinc-700 transition hover:bg-zinc-50 sm:gap-1 sm:px-1.5 sm:text-[10px]"
         >
           <History className="h-3 w-3 shrink-0" aria-hidden />
-          Movim.
+          <span className="truncate">Movim.</span>
         </Link>
       </div>
     </article>

@@ -62,7 +62,7 @@ export default function InventarioMovimientosPage() {
   const selectedName = items.find((i) => i.id === selectedItemId)?.name;
 
   return (
-    <div className="space-y-2 sm:space-y-2.5">
+    <div className="min-w-0 space-y-2 sm:space-y-2.5">
       {banner ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-950 ring-1 ring-amber-100">
           {banner}
