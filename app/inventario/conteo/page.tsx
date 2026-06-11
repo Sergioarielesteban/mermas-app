@@ -4,7 +4,6 @@ import React from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import ModuleHeader from '@/components/ModuleHeader';
 import { useAuth } from '@/components/AuthProvider';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
@@ -123,7 +122,7 @@ export default function InventarioConteoPage() {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center text-sm text-zinc-500">
+      <div className="rounded-2xl border border-zinc-200/70 bg-white px-3 py-4 text-center text-[12px] text-zinc-500 ring-1 ring-zinc-100/80">
         Preparando conteo…
       </div>
     );
@@ -131,11 +130,10 @@ export default function InventarioConteoPage() {
 
   if (items.length === 0) {
     return (
-      <div className="space-y-4">
-        <ModuleHeader title="Conteo rápido" dense />
-        <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-8 text-center text-sm text-zinc-600">
+      <div className="space-y-2">
+        <div className="rounded-2xl border border-dashed border-zinc-200/90 bg-zinc-50/70 px-3 py-4 text-center text-[12px] text-zinc-600 ring-1 ring-zinc-100">
           No hay productos para contar.{' '}
-          <Link href="/inventario/valoracion" className="font-bold text-[#D32F2F] underline">
+          <Link href="/inventario/valoracion" className="font-bold text-[#B91C1C]">
             Activa productos
           </Link>
           .
@@ -145,51 +143,51 @@ export default function InventarioConteoPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <ModuleHeader title="Conteo rápido" dense />
-
-      <div className="flex items-center justify-between text-xs font-semibold text-zinc-600">
+    <div className="space-y-2 sm:space-y-2.5">
+      <div className="flex items-center justify-between text-[11px] font-semibold text-zinc-600">
         <span>
           Producto {index + 1} / {items.length}
         </span>
-        <span>{savedCount} ajustes en esta sesión</span>
+        <span>{savedCount} ajustes</span>
       </div>
 
       {banner ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-950 ring-1 ring-amber-100">
           {banner}
         </div>
       ) : null}
 
       {current ? (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-bold text-zinc-900">{current.name}</h2>
+        <div className="rounded-2xl border border-zinc-200/70 bg-white px-3 py-2.5 shadow-sm ring-1 ring-zinc-100/80">
+          <h2 className="truncate text-[14px] font-black leading-tight text-zinc-950">{current.name}</h2>
           {current.format_label ? (
-            <p className="mt-0.5 text-xs text-zinc-500">{current.format_label}</p>
+            <p className="mt-0.5 truncate text-[10px] text-zinc-500">{current.format_label}</p>
           ) : null}
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl bg-zinc-50 px-3 py-3 ring-1 ring-zinc-100">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Stock sistema</p>
-              <p className="mt-1 text-2xl font-extrabold tabular-nums text-zinc-900">
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/80 px-2 py-2 ring-1 ring-zinc-100/70">
+              <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Sistema</p>
+              <p className="mt-0.5 font-mono text-[15px] font-bold tabular-nums leading-none text-zinc-900">
                 {formatStockQuantity(systemQty, current.unit)}
               </p>
             </div>
             <div
               className={[
-                'rounded-xl px-3 py-3 ring-1',
-                diff != null && diff !== 0 ? 'bg-amber-50 ring-amber-200/70' : 'bg-emerald-50/60 ring-emerald-200/60',
+                'rounded-2xl border px-2 py-2 ring-1',
+                diff != null && diff !== 0
+                  ? 'border-amber-200/80 bg-amber-50/80 ring-amber-100/80'
+                  : 'border-emerald-200/80 bg-emerald-50/60 ring-emerald-100/70',
               ].join(' ')}
             >
-              <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Diferencia</p>
-              <p className="mt-1 text-2xl font-extrabold tabular-nums text-zinc-900">
+              <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">Diferencia</p>
+              <p className="mt-0.5 font-mono text-[15px] font-bold tabular-nums leading-none text-zinc-900">
                 {diff == null ? '—' : diff === 0 ? '0' : `${diff > 0 ? '+' : ''}${diff}`}
               </p>
             </div>
           </div>
 
-          <label className="mt-4 block">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">Stock real contado</span>
+          <label className="mt-2.5 block">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Stock real</span>
             <input
               type="text"
               inputMode="decimal"
@@ -197,40 +195,40 @@ export default function InventarioConteoPage() {
               value={countedQty}
               onChange={(e) => setCountedQty(e.target.value)}
               disabled={busy}
-              className="mt-1 h-14 w-full rounded-2xl border border-zinc-200 px-4 text-2xl font-extrabold tabular-nums text-zinc-900"
+              className="mt-1 h-11 w-full rounded-2xl border border-zinc-200/80 px-3 text-[18px] font-bold tabular-nums text-zinc-900 ring-1 ring-zinc-200/70"
               placeholder="0"
             />
           </label>
 
-          <label className="mt-3 block">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">Motivo del ajuste</span>
+          <label className="mt-2 block">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Motivo</span>
             <input
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               disabled={busy}
-              className="mt-1 h-10 w-full rounded-xl border border-zinc-200 px-3 text-sm"
-              placeholder="Conteo de turno, merma no registrada…"
+              className="mt-1 h-9 w-full rounded-2xl border border-zinc-200/80 px-2.5 text-[13px] ring-1 ring-zinc-200/70"
+              placeholder="Conteo de turno…"
             />
           </label>
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="mt-2.5 grid grid-cols-2 gap-1.5">
             <button
               type="button"
               disabled={busy || index === 0}
               onClick={goPrev}
-              className="inline-flex h-11 items-center justify-center gap-1 rounded-xl border border-zinc-200 bg-white text-xs font-bold text-zinc-800 disabled:opacity-40"
+              className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-2xl border border-zinc-200 bg-white text-[10px] font-bold text-zinc-700 disabled:opacity-40"
             >
-              <ChevronLeft className="h-4 w-4" aria-hidden /> Anterior
+              <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Anterior
             </button>
             <button
               type="button"
               disabled={busy}
               onClick={() => void saveCurrent(true)}
-              className="inline-flex h-11 items-center justify-center gap-1 rounded-xl bg-[#D32F2F] text-xs font-bold text-white disabled:opacity-45"
+              className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-2xl bg-[#D32F2F] text-[10px] font-bold text-white disabled:opacity-45"
             >
-              {busy ? 'Guardando…' : 'Guardar y siguiente'}
-              <ChevronRight className="h-4 w-4" aria-hidden />
+              {busy ? 'Guardando…' : 'Guardar →'}
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
             </button>
           </div>
 
@@ -238,7 +236,7 @@ export default function InventarioConteoPage() {
             type="button"
             disabled={busy}
             onClick={() => void saveCurrent(false)}
-            className="mt-2 h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50 text-xs font-bold text-zinc-800 disabled:opacity-45"
+            className="mt-1.5 min-h-[34px] w-full rounded-2xl border border-zinc-200 bg-white text-[10px] font-bold text-zinc-700 disabled:opacity-45"
           >
             Guardar sin avanzar
           </button>
@@ -248,7 +246,7 @@ export default function InventarioConteoPage() {
       <button
         type="button"
         onClick={() => void finishSession()}
-        className="h-10 w-full rounded-xl border border-zinc-300 bg-white text-xs font-bold text-zinc-700"
+        className="min-h-[36px] w-full rounded-2xl border border-zinc-200/80 bg-white text-[11px] font-bold text-zinc-700 ring-1 ring-zinc-200/70"
       >
         Terminar conteo
       </button>
