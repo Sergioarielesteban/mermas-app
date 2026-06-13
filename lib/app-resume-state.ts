@@ -40,6 +40,22 @@ function isDeeperPathInSameModule(currentPathname: string, savedPathname: string
   return !!currentRoot && currentRoot === savedRoot && normalizePathname(savedPathname) !== currentRoot;
 }
 
+export function shouldSkipResumeRestoreForModuleRootNavigation(
+  currentPathname: string | null | undefined,
+  targetPathname: string | null | undefined,
+): boolean {
+  const current = normalizePathname(currentPathname);
+  const target = normalizePathname(targetPathname);
+  const currentRoot = moduleRoot(current);
+  const targetRoot = moduleRoot(target);
+
+  if (!currentRoot || !targetRoot) return false;
+  if (currentRoot !== targetRoot) return false;
+  if (current === currentRoot) return false;
+
+  return target === targetRoot;
+}
+
 export function isResumeEligiblePath(pathname: string | null | undefined): pathname is string {
   if (!pathname) return false;
   if (pathname === '/' || pathname === '/login' || pathname === '/onboarding' || pathname === '/precio') return false;
@@ -116,6 +132,14 @@ export function markAppResumeModuleRootNavigationOnce(): void {
   } catch {
     /* Best effort only. */
   }
+}
+
+export function markAppResumeModuleRootNavigationIfNeeded(
+  currentPathname: string | null | undefined,
+  targetPathname: string | null | undefined,
+): void {
+  if (!shouldSkipResumeRestoreForModuleRootNavigation(currentPathname, targetPathname)) return;
+  markAppResumeModuleRootNavigationOnce();
 }
 
 export function consumeAppResumeRouteRestoreSkipOnce(): boolean {

@@ -2,9 +2,10 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import InventarioMovementTimeline from '@/components/inventario/InventarioMovementTimeline';
 import { useAuth } from '@/components/AuthProvider';
+import { markAppResumeModuleRootNavigationIfNeeded } from '@/lib/app-resume-state';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   fetchInventoryMovements,
@@ -43,6 +44,7 @@ function FilterChip({
 }
 
 export default function InventarioMovimientosPage() {
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const itemFilter = searchParams.get('item');
   const { localId, profileReady } = useAuth();
@@ -150,7 +152,11 @@ export default function InventarioMovimientosPage() {
       />
 
       <div className="flex justify-center pt-1">
-        <Link href="/inventario" className="text-[11px] font-bold text-zinc-600">
+        <Link
+          href="/inventario"
+          onClick={() => markAppResumeModuleRootNavigationIfNeeded(pathname, '/inventario')}
+          className="text-[11px] font-bold text-zinc-600"
+        >
           ← Volver a stock
         </Link>
       </div>

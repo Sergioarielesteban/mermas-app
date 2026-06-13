@@ -2,9 +2,10 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
+import { markAppResumeModuleRootNavigationIfNeeded } from '@/lib/app-resume-state';
 import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import {
   applyCountAdjustment,
@@ -23,6 +24,7 @@ type SessionDiff = {
 };
 
 export default function InventarioConteoPage() {
+  const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const startItemId = searchParams.get('item');
@@ -211,7 +213,10 @@ export default function InventarioConteoPage() {
 
         <button
           type="button"
-          onClick={() => router.push('/inventario')}
+          onClick={() => {
+            markAppResumeModuleRootNavigationIfNeeded(pathname, '/inventario');
+            router.push('/inventario');
+          }}
           className="min-h-[36px] w-full rounded-2xl bg-[#D32F2F] text-[11px] font-bold text-white"
         >
           Volver a stock

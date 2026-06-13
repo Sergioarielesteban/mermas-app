@@ -51,6 +51,7 @@ import {
 } from '@/lib/app-role-permissions';
 import { getModuleAccess } from '@/lib/canAccessModule';
 import { APP_MODULE_HOME, getAppNavBreadcrumb, getParentRoute } from '@/lib/app-navigation';
+import { markAppResumeModuleRootNavigationIfNeeded } from '@/lib/app-resume-state';
 import { isModuleEnabled, type AppModuleId } from '@/lib/module-config';
 import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 
@@ -459,6 +460,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (pathname?.startsWith('/pedidos') && target.startsWith('/pedidos')) {
       markPedidosUiSkipRestoreOnce();
     }
+    markAppResumeModuleRootNavigationIfNeeded(pathname, target);
     router.push(target, { scroll: false });
   }, [router, pathname]);
 

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BarChart2, ClipboardList, History, Package } from 'lucide-react';
+import { markAppResumeModuleRootNavigationIfNeeded } from '@/lib/app-resume-state';
 
 const LINKS: {
   href: string;
@@ -56,6 +57,7 @@ export default function InventarioSubnav({ className = '' }: Props) {
             <Link
               key={href}
               href={href}
+              onClick={() => markAppResumeModuleRootNavigationIfNeeded(pathname, href)}
               className={[
                 'group flex min-h-[2.5rem] min-w-0 items-center gap-1.5 rounded-[18px] border px-2 py-1.5 text-left transition active:scale-[0.99] sm:min-h-[2.65rem] sm:gap-2 sm:px-2.5 sm:py-2',
                 active
