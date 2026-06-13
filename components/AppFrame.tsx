@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useEffect } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import BottomNav, { BOTTOM_QUICK_ACTIONS_SCROLL_PADDING } from '@/components/BottomNav';
 import { useAuth } from '@/components/AuthProvider';
 import Logo from '@/components/Logo';
+import ModuleUnavailableScreen from '@/components/ModuleUnavailableScreen';
 import {
   APP_RESUME_SCROLL_RESTORE_FLAG,
   clearAppResumeState,
@@ -15,6 +17,7 @@ import {
   shouldRestoreAppResumeRoute,
   writeAppResumeState,
 } from '@/lib/app-resume-state';
+import { getDisabledModuleForPath } from '@/lib/module-config';
 import { readOperationalScrollY, restoreOperationalScrollY } from '@/lib/persisted-screen-state';
 
 export default function AppFrame({ children }: { children: React.ReactNode }) {
@@ -32,18 +35,25 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
   /** Tablet fichaje a pantalla completa (sesión encargado; empleados solo PIN). */
   const isTerminalFichaje =
     pathname === '/terminal-fichaje' || pathname.startsWith('/terminal-fichaje/');
+  const disabledModule = getDisabledModuleForPath(pathname);
   const [forceUnlock, setForceUnlock] = React.useState(false);
   const loginFallbackTimerRef = React.useRef<number | null>(null);
 
   useEffect(() => {
-    if (!loading) {
+    const resetTimer = window.setTimeout(() => {
       setForceUnlock(false);
-      return;
+    }, 0);
+
+    if (!loading) {
+      return () => window.clearTimeout(resetTimer);
     }
     const timer = window.setTimeout(() => {
       setForceUnlock(true);
     }, 1800);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(resetTimer);
+      window.clearTimeout(timer);
+    };
   }, [loading]);
 
   const effectiveLoading = loading && !forceUnlock;
@@ -274,13 +284,13 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
           </div>
           <p className="order-3 px-2 text-center text-[11px] leading-snug text-zinc-400">
             Vista previa estrecha: si no ves cambios, abre{' '}
-            <a href="/login" className="font-semibold text-[#D32F2F] underline underline-offset-2">
+            <Link href="/login" className="font-semibold text-[#D32F2F] underline underline-offset-2">
               /login
-            </a>{' '}
+            </Link>{' '}
             o la landing en{' '}
-            <a href="/" className="font-semibold text-[#D32F2F] underline underline-offset-2">
+            <Link href="/" className="font-semibold text-[#D32F2F] underline underline-offset-2">
               /
-            </a>{' '}
+            </Link>{' '}
             en Chrome o Safari.
           </p>
           <div className="order-last mt-1 w-full">
@@ -302,6 +312,14 @@ export default function AppFrame({ children }: { children: React.ReactNode }) {
         >
           Ir a iniciar sesión
         </a>
+      </main>
+    );
+  }
+
+  if (disabledModule && !isLogin && !isPublicHome && !isOnboarding && !isPrecio) {
+    return (
+      <main className="flex min-h-[100dvh] flex-col bg-white">
+        <ModuleUnavailableScreen moduleName={disabledModule.label} />
       </main>
     );
   }

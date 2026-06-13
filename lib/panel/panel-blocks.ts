@@ -17,6 +17,7 @@
  * — ver `components/panel/PanelCriticalAlerts.tsx`.
  */
 
+import type { AppModuleId } from '@/lib/module-config';
 import type { PlanModule } from '@/lib/planPermissions';
 
 export type PanelBlockCategory = 'operativa' | 'control' | 'gestion' | 'personal';
@@ -47,6 +48,8 @@ export type PanelBlockSize = 'large' | 'small';
 
 export type PanelBlockMeta = {
   id: PanelBlockId;
+  /** Feature flag de producto que controla si el bloque existe en esta versión pública. */
+  module: AppModuleId;
   title: string;
   /** Texto secundario corto para mostrar en el sheet de personalización. */
   short: string;
@@ -66,6 +69,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   // ─── OPERATIVA ────────────────────────────────────────────────────────────
   {
     id: 'pedidos-agenda',
+    module: 'pedidos',
     title: 'Pedidos del día',
     short: 'Obligatorios y revisión diaria de proveedores',
     category: 'operativa',
@@ -77,6 +81,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   },
   {
     id: 'pedidos-llegan-hoy',
+    module: 'pedidos',
     title: 'Recibir pedidos de hoy',
     short: 'Recepciones previstas para hoy',
     category: 'operativa',
@@ -87,6 +92,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   },
   {
     id: 'produccion',
+    module: 'produccion',
     title: 'Producción de hoy',
     short: 'Plan del día y elaboraciones',
     category: 'operativa',
@@ -96,6 +102,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   },
   {
     id: 'actividad-reciente',
+    module: 'actividad_reciente',
     title: 'Actividad reciente',
     short: 'Últimos movimientos del equipo',
     category: 'operativa',
@@ -106,6 +113,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   // ─── CONTROL ──────────────────────────────────────────────────────────────
   {
     id: 'temperaturas',
+    module: 'appcc',
     title: 'Temperaturas',
     short: 'Registros pendientes APPCC',
     category: 'control',
@@ -116,6 +124,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   },
   {
     id: 'aceites',
+    module: 'appcc',
     title: 'Aceites',
     short: 'Cambios y filtrado de freidoras',
     category: 'control',
@@ -125,6 +134,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   },
   {
     id: 'checklist',
+    module: 'checklist',
     title: 'Check list',
     short: 'Listas operativas (apertura, cierre…)',
     category: 'control',
@@ -134,6 +144,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   },
   {
     id: 'appcc',
+    module: 'appcc',
     title: 'APPCC',
     short: 'Alérgenos, registros y partes',
     category: 'control',
@@ -143,6 +154,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   },
   {
     id: 'limpieza',
+    module: 'appcc',
     title: 'Limpieza',
     short: 'Plan y registro de limpieza',
     category: 'control',
@@ -154,6 +166,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   // ─── GESTIÓN ──────────────────────────────────────────────────────────────
   {
     id: 'inventario',
+    module: 'inventario',
     title: 'Inventario',
     short: 'Stock y valoración',
     category: 'gestion',
@@ -164,6 +177,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   },
   {
     id: 'escandallos',
+    module: 'escandallos',
     title: 'Escandallos',
     short: 'Recetas y costes por plato',
     category: 'gestion',
@@ -174,6 +188,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   },
   {
     id: 'finanzas',
+    module: 'finanzas',
     title: 'Finanzas',
     short: 'Ventas, costes y rentabilidad',
     category: 'gestion',
@@ -186,6 +201,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   // ─── PERSONAL ─────────────────────────────────────────────────────────────
   {
     id: 'horarios',
+    module: 'personal',
     title: 'Horarios',
     short: 'Turnos, fichajes y equipo',
     category: 'personal',
@@ -195,6 +211,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   },
   {
     id: 'chat',
+    module: 'chat',
     title: 'Chat del local',
     short: 'Comunicación rápida del turno',
     category: 'personal',
@@ -205,6 +222,7 @@ export const PANEL_BLOCKS: readonly PanelBlockMeta[] = [
   },
   {
     id: 'comunicacion',
+    module: 'comunicacion',
     title: 'Comunicación interna',
     short: 'Avisos, notas y anuncios',
     category: 'personal',

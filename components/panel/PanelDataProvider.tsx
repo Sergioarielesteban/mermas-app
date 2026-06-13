@@ -19,6 +19,7 @@ import { getSupabaseClient, isSupabaseEnabled } from '@/lib/supabase-client';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 import { canAccessPedidosByRole } from '@/lib/app-role-permissions';
 import { getModuleAccess } from '@/lib/canAccessModule';
+import { isModuleEnabled } from '@/lib/module-config';
 import type { PlanModule } from '@/lib/planPermissions';
 import type { AgendaCutoffRow, AgendaReviewSupplierGroup } from '@/hooks/useOrderAgendaToday';
 
@@ -75,7 +76,8 @@ export function PanelDataProvider({ children }: { children: React.ReactNode }) {
       canAccessPedidos(localCode, email, localName, localId) && canAccessPedidosByRole(role),
     [localCode, email, localName, localId, role],
   );
-  const canUseAssistant = profileRole === 'admin';
+  const chatEnabled = isModuleEnabled('chat');
+  const canUseAssistant = profileRole === 'admin' && isModuleEnabled('assistant');
 
   const isBlockedByPlan = React.useCallback(
     (module: PlanModule) => {
@@ -102,7 +104,7 @@ export function PanelDataProvider({ children }: { children: React.ReactNode }) {
   // Notificaciones del equipo: usamos solo las de tipo `chat_message` para el
   // badge rojo de Comunicación / Chat. Se actualiza en tiempo real vía realtime.
   // El `channelKey` evita colisión con la campanita del AppShell.
-  const notifications = useNotifications(localId ?? null, userId ?? null, profileRole, 'panel');
+  const notifications = useNotifications(chatEnabled ? (localId ?? null) : null, userId ?? null, profileRole, 'panel');
   const chatUnreadCount = React.useMemo(
     () =>
       notifications.items.filter((n) => n.type === 'chat_message' && !n.readAt).length,

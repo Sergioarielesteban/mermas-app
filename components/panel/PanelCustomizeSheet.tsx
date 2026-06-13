@@ -48,7 +48,10 @@ type Props = {
 /** Bottom-sheet premium para personalizar el Panel de Control. */
 export default function PanelCustomizeSheet({ open, onClose, panel }: Props) {
   const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => setMounted(true), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   // Bloquea el scroll del body cuando se abre.
   React.useEffect(() => {
@@ -81,7 +84,6 @@ function Sheet({ onClose, panel }: { onClose: () => void; panel: UsePanelConfigR
     availableByCategory,
     availableBlocks,
     isFavorite,
-    isHidden,
     isCritical,
     setOrder,
     toggleHidden,
@@ -121,6 +123,14 @@ function Sheet({ onClose, panel }: { onClose: () => void; panel: UsePanelConfigR
       }))
       .filter((c) => c.items.length > 0);
   }, [availableByCategory, visibleBlockIds]);
+  const visiblePresets = React.useMemo(() => {
+    const availableIds = new Set(availableBlocks.map((b) => b.id));
+    return PANEL_PRESETS.filter(
+      (preset) =>
+        preset.order.every((id) => availableIds.has(id)) &&
+        preset.favorites.every((id) => availableIds.has(id)),
+    );
+  }, [availableBlocks]);
 
   return (
     <div className="fixed inset-0 z-[120] flex flex-col" role="dialog" aria-modal="true">
@@ -173,45 +183,49 @@ function Sheet({ onClose, panel }: { onClose: () => void; panel: UsePanelConfigR
         {/* Scroll area */}
         <div className="flex-1 overflow-y-auto px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-1">
           {/* Presets */}
-          <p className="mb-1.5 mt-2 px-0.5 font-sans text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-            Vistas rápidas
-          </p>
-          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {PANEL_PRESETS.map((preset) => {
-              const active = config.preset === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => applyPreset(preset.id)}
-                  className={[
-                    'shrink-0 rounded-2xl px-3.5 py-2 text-left ring-1 transition-transform active:scale-[0.98]',
-                    active
-                      ? 'bg-zinc-900 text-white ring-zinc-900'
-                      : 'bg-white text-zinc-900 ring-zinc-200/80',
-                  ].join(' ')}
-                  style={{ minWidth: 168 }}
-                >
-                  <p
-                    className={[
-                      'font-serif text-[13px] font-normal leading-tight',
-                      active ? 'text-white' : 'text-zinc-900',
-                    ].join(' ')}
-                  >
-                    {preset.label}
-                  </p>
-                  <p
-                    className={[
-                      'mt-0.5 text-[10px] leading-snug',
-                      active ? 'text-white/80' : 'text-zinc-500',
-                    ].join(' ')}
-                  >
-                    {preset.description}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
+          {visiblePresets.length > 0 ? (
+            <>
+              <p className="mb-1.5 mt-2 px-0.5 font-sans text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                Vistas rápidas
+              </p>
+              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {visiblePresets.map((preset) => {
+                  const active = config.preset === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => applyPreset(preset.id)}
+                      className={[
+                        'shrink-0 rounded-2xl px-3.5 py-2 text-left ring-1 transition-transform active:scale-[0.98]',
+                        active
+                          ? 'bg-zinc-900 text-white ring-zinc-900'
+                          : 'bg-white text-zinc-900 ring-zinc-200/80',
+                      ].join(' ')}
+                      style={{ minWidth: 168 }}
+                    >
+                      <p
+                        className={[
+                          'font-serif text-[13px] font-normal leading-tight',
+                          active ? 'text-white' : 'text-zinc-900',
+                        ].join(' ')}
+                      >
+                        {preset.label}
+                      </p>
+                      <p
+                        className={[
+                          'mt-0.5 text-[10px] leading-snug',
+                          active ? 'text-white/80' : 'text-zinc-500',
+                        ].join(' ')}
+                      >
+                        {preset.description}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : null}
 
           {/* Tu panel */}
           <div className="mt-2 flex items-center justify-between px-0.5">

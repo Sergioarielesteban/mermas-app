@@ -14,9 +14,11 @@ import {
   Timer,
   UtensilsCrossed,
 } from 'lucide-react';
+import { isModuleEnabled, type AppModuleId } from '@/lib/module-config';
 
 export type MarketingModuleDefinition = {
   id: string;
+  module: AppModuleId;
   title: string;
   summary: string;
   Icon: LucideIcon;
@@ -29,6 +31,7 @@ export type MarketingModuleDefinition = {
 export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   {
     id: 'pedidos',
+    module: 'pedidos',
     title: 'Pedidos y recepción',
     summary: 'Lo que pides y lo que llega, sin perder el hilo. OCR de albarán cuando lo necesites.',
     Icon: ShoppingCart,
@@ -44,6 +47,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'oido-chef',
+    module: 'assistant',
     title: 'Oído Chef (asistente)',
     summary: 'Voz o texto: precios, limpieza, APPCC, pedidos. IA opcional y lectura de respuestas en voz natural.',
     Icon: Bot,
@@ -59,6 +63,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'mermas',
+    module: 'mermas',
     title: 'Mermas',
     summary: 'Lo que tiras, medido. Motivo y coste en segundos.',
     Icon: Flame,
@@ -73,6 +78,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'appcc',
+    module: 'appcc',
     title: 'APPCC',
     summary: 'Limpieza, temperaturas de frío, aceite y el historial cuando lo pidan.',
     Icon: ShieldCheck,
@@ -89,6 +95,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'checklist',
+    module: 'checklist',
     title: 'Check list operativa',
     summary: 'Apertura, cambio de turno, cierre e higiene: tus listas, tus ítems.',
     Icon: ListChecks,
@@ -104,6 +111,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'produccion',
+    module: 'produccion',
     title: 'Producción',
     summary: 'Planes por zonas y cadencia: elaborados, cuarto frío, lo que nombréis vosotros.',
     Icon: Factory,
@@ -119,6 +127,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'inventario',
+    module: 'inventario',
     title: 'Inventario',
     summary: 'Stock y valor por local, desde el móvil.',
     Icon: ClipboardList,
@@ -133,6 +142,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'escandallos',
+    module: 'escandallos',
     title: 'Escandallos',
     summary: 'Coste de plato, food cost y mix con datos reales.',
     Icon: Scale,
@@ -147,6 +157,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'comida-personal',
+    module: 'comida_personal',
     title: 'Consumo interno',
     summary: 'Registro de consumo del equipo: trabajador, servicio y coste interno.',
     Icon: UtensilsCrossed,
@@ -162,6 +173,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'chat',
+    module: 'chat',
     title: 'Chat del local',
     summary: 'Avisos del equipo dentro de la app.',
     Icon: MessageCircle,
@@ -176,6 +188,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'horarios',
+    module: 'personal',
     title: 'Horarios',
     summary: 'Próximamente',
     Icon: CalendarDays,
@@ -191,6 +204,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'fichaje',
+    module: 'terminal_fichaje',
     title: 'Fichaje',
     summary: 'Próximamente',
     Icon: Timer,
@@ -206,6 +220,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
   },
   {
     id: 'cocina-central',
+    module: 'cocina_central',
     title: 'Cocina central',
     summary: 'Próximamente',
     Icon: Building2,
@@ -219,3 +234,7 @@ export const MARKETING_MODULES: MarketingModuleDefinition[] = [
     result: 'Menos fricción cuando creces.',
   },
 ];
+
+export const ENABLED_MARKETING_MODULES: MarketingModuleDefinition[] = MARKETING_MODULES.filter((mod) =>
+  isModuleEnabled(mod.module),
+);

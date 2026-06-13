@@ -75,6 +75,7 @@ import { recalculateRecipeCost, resolveEscandalloLineCost } from '@/lib/escandal
 import { formatMoneyEur, formatUnitPriceEur } from '@/lib/money-format';
 import { rawIngredientWeightDetail, totalInputWeightKg } from '@/lib/escandallo-input-weight';
 import { fetchCentralKitchenPublicCatalog, type EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
+import { isModuleEnabled } from '@/lib/module-config';
 import RecipePriceSimulatorPanel from '@/components/escandallos/RecipePriceSimulatorPanel';
 import {
   buildFamilyPriceBenchmark,
@@ -121,6 +122,7 @@ function EditorMetric({
 }
 
 export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: string }) {
+  const centralKitchenEnabled = isModuleEnabled('cocina_central');
   const router = useRouter();
   const { localId, profileReady, displayName, localName } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
@@ -327,7 +329,9 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloRecipeCategoriasMap(supabase, localId),
         fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
-        fetchCentralKitchenPublicCatalog(supabase, localId).catch(() => [] as EscandalloCentralKitchenCatalogItem[]),
+        centralKitchenEnabled
+          ? fetchCentralKitchenPublicCatalog(supabase, localId).catch(() => [] as EscandalloCentralKitchenCatalogItem[])
+          : Promise.resolve([] as EscandalloCentralKitchenCatalogItem[]),
       ]);
       setRecipes(r);
       setRawProducts(raw);
@@ -351,7 +355,7 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
     } finally {
       setLoading(false);
     }
-  }, [localId, supabaseOk, demoReadonly]);
+  }, [localId, supabaseOk, demoReadonly, centralKitchenEnabled]);
 
   useEffect(() => {
     if (!profileReady) return;
@@ -1257,10 +1261,10 @@ export default function EscandalloRecipeEditorClient({ recipeId }: { recipeId: s
                               {inputWeightDetail ? (
                                 <p className="text-[9px] font-medium text-[#7E7468]">{parsed.name} · {inputWeightDetail}</p>
                               ) : null}
-                              {line.sourceType === 'central_kitchen' ? (
+                              {line.sourceType === 'central_kitchen' && centralKitchenEnabled ? (
                                 <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#4A6B3A]">Cocina Central</p>
                               ) : null}
-                              {line.sourceType === 'central_kitchen' && centralItem && !centralItem.active ? (
+                              {line.sourceType === 'central_kitchen' && centralKitchenEnabled && centralItem && !centralItem.active ? (
                                 <p className="text-[9px] font-medium text-[#B8872A]">Producto desactivado en Cocina Central</p>
                               ) : null}
                             </div>

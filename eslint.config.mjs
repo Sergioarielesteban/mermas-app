@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "chef-one-CODIGO-PARTE-1-producto-ux-20260430-2020/**",
+    "pedidos-modulo-20260508-1608/**",
   ]),
 ]);
 

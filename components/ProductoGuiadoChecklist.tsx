@@ -6,6 +6,7 @@ import { ListChecks } from 'lucide-react';
 import { useAuth } from '@/components/AuthProvider';
 import { isDemoMode } from '@/lib/demo-mode';
 import { canAccessFinanzas } from '@/lib/app-role-permissions';
+import { isModuleEnabled } from '@/lib/module-config';
 
 const DISMISS_KEY = 'chef_one_guia_cerrada';
 
@@ -41,7 +42,7 @@ export default function ProductoGuiadoChecklist() {
     setDismissed(window.localStorage.getItem(DISMISS_KEY) === '1');
   }, []);
 
-  if (!canAccessFinanzas(profileRole)) return null;
+  if (!isModuleEnabled('finanzas') || !canAccessFinanzas(profileRole)) return null;
   if (dismissed || isDemoMode()) return null;
 
   return (

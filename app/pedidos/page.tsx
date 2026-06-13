@@ -125,6 +125,7 @@ import {
 } from '@/lib/pedidos-recepcion-summary-supabase';
 import { parsePriceInput } from '@/lib/money-format';
 import { getPedidoDrafts } from '@/lib/pedidos-storage';
+import { getEnabledHrefOrNull, isModuleEnabled } from '@/lib/module-config';
 import { getAppMainScrollElement, readMainScrollTop, setMainScrollTop } from '@/lib/pedidos-main-scroll';
 import {
   pedidosDevUiError,
@@ -459,9 +460,14 @@ function matchAssistantSingleTopicNav(normalized: string): { href: string; messa
     inventario: { href: '/inventario', message: 'Abriendo Inventario…' },
     escandallos: { href: '/escandallos', message: 'Abriendo Escandallos…' },
   };
-  if (exact[n]) return exact[n];
+  const exactMatch = exact[n];
+  if (exactMatch) {
+    const href = getEnabledHrefOrNull(exactMatch.href);
+    return href ? { ...exactMatch, href } : null;
+  }
   if (n === 'comida personal' || n === 'comida del personal' || n === 'consumo interno') {
-    return { href: '/comida-personal', message: 'Abriendo Consumo interno…' };
+    const href = getEnabledHrefOrNull('/comida-personal');
+    return href ? { href, message: 'Abriendo Consumo interno…' } : null;
   }
   if (n === 'nuevo pedido' || n === 'pedido nuevo') {
     return { href: '/pedidos/nuevo', message: 'Abriendo Nuevo pedido…' };
@@ -482,7 +488,7 @@ const ASSISTANT_FALLBACK_HINT = [
   'No lo tengo claro. Prueba una de estas ideas (también valen palabras sueltas como «limpieza», «recepción», «appcc»):',
   '',
   'Pedidos: «resumen», «pedidos enviados», «abre pendientes de entrega», «marcar recibido pedido de …», «WhatsApp pedido de …», «actualiza … a … € en …».',
-  'Pantallas: «recepción», «proveedores», «precios», «calendario», «comida».',
+  'Pantallas: «recepción», «proveedores», «precios», «calendario».',
   'Limpieza: «limpieza», «qué toca limpiar hoy» o «cronograma limpieza».',
   'APPCC: «appcc», «estado APPCC hoy», «temperaturas», «aceite».',
 ].join('\n');
@@ -644,6 +650,7 @@ export default function PedidosPage() {
   const [assistantBusy, setAssistantBusy] = React.useState(false);
   const [assistantHistory, setAssistantHistory] = React.useState<AssistantHistoryRow[]>([]);
   const [assistantListening, setAssistantListening] = React.useState(false);
+  const comidaPersonalEnabled = isModuleEnabled('comida_personal');
   const assistantRecognitionRef = React.useRef<{
     stop: () => void;
   } | null>(null);
@@ -2846,14 +2853,16 @@ export default function PedidosPage() {
           '· Pedidos: «resumen», «pendientes», enviados/recibidos, recepción, proveedores, precios.',
           '· Limpieza: «limpieza» o «qué toca limpiar hoy».',
           '· APPCC: «appcc», «estado APPCC hoy», temperaturas, aceite.',
-          '· Consumo interno: «comida», registros y anulaciones (ver ejemplos al fallar un comando).',
+          comidaPersonalEnabled
+            ? '· Consumo interno: «comida», registros y anulaciones (ver ejemplos al fallar un comando).'
+            : null,
           '',
           'Tip: una sola palabra suele bastar (ej. «limpieza», «recepción», «appcc»).',
           '',
           oidoChefAiEnabled
             ? 'Con IA activada: puedes preguntar en lenguaje natural (p. ej. precios de la semana); la respuesta usa los pedidos cargados en esta pantalla.'
             : 'Para preguntas libres con ChatGPT (API OpenAI), activa NEXT_PUBLIC_OIDO_CHEF_AI en el despliegue y OPENAI_API_KEY en el servidor.',
-        ].join('\n');
+        ].filter((line): line is string => line !== null).join('\n');
         setAssistantReply(msg);
         pushAssistantHistory(raw, msg);
         return;
@@ -2965,7 +2974,7 @@ export default function PedidosPage() {
           !n.includes('cuantos') &&
           !n.includes('trabajador')
         ) {
-          return '/comida-personal';
+          return getEnabledHrefOrNull('/comida-personal');
         }
         return null;
       };
@@ -2992,29 +3001,31 @@ export default function PedidosPage() {
         const today = new Date().toISOString().slice(0, 10);
         const nSent = sentOrders.length;
         const nRec = orders.filter((o) => o.status === 'received').length;
-        let mealsPart = 'Consumo interno hoy: (sin sesión o datos).';
+        let mealsPart: string | null = comidaPersonalEnabled ? 'Consumo interno hoy: (sin sesión o datos).' : null;
         let cleanPart = 'Limpieza hoy: (sin sesión o datos).';
         const supabase = localId ? getSupabaseClient() : null;
         if (localId && supabase) {
-          const [mealsRes, tasks, units, schedule] = await Promise.all([
-            supabase
-              .from('staff_meal_records')
-              .select('people_count,total_cost_eur')
-              .eq('local_id', localId)
-              .eq('meal_date', today)
-              .is('voided_at', null),
+          const [tasks, units, schedule] = await Promise.all([
             fetchCleaningTasks(supabase, localId, true),
             fetchAppccColdUnits(supabase, localId, true),
             fetchCleaningWeekdayItems(supabase, localId),
           ]);
-          if (mealsRes.error) throw new Error(mealsRes.error.message);
-          const mrows = mealsRes.data ?? [];
-          const unitsMeal = mrows.reduce((acc, r) => acc + Number((r as { people_count: number }).people_count ?? 0), 0);
-          const costEur = mrows.reduce(
-            (acc, r) => acc + Number((r as { total_cost_eur: number | null }).total_cost_eur ?? 0),
-            0,
-          );
-          mealsPart = `Consumo interno hoy: ${mrows.length} líneas, ${unitsMeal.toFixed(0)} uds, ${costEur.toFixed(2)} €.`;
+          if (comidaPersonalEnabled) {
+            const mealsRes = await supabase
+              .from('staff_meal_records')
+              .select('people_count,total_cost_eur')
+              .eq('local_id', localId)
+              .eq('meal_date', today)
+              .is('voided_at', null);
+            if (mealsRes.error) throw new Error(mealsRes.error.message);
+            const mrows = mealsRes.data ?? [];
+            const unitsMeal = mrows.reduce((acc, r) => acc + Number((r as { people_count: number }).people_count ?? 0), 0);
+            const costEur = mrows.reduce(
+              (acc, r) => acc + Number((r as { total_cost_eur: number | null }).total_cost_eur ?? 0),
+              0,
+            );
+            mealsPart = `Consumo interno hoy: ${mrows.length} líneas, ${unitsMeal.toFixed(0)} uds, ${costEur.toFixed(2)} €.`;
+          }
           const wd = new Date().getDay();
           const srows = schedule.filter((s) => s.weekday === wd);
           if (srows.length === 0) {
@@ -3032,7 +3043,14 @@ export default function PedidosPage() {
         }
         const ctx = (localName ?? localCode ?? '').trim();
         const pfx = ctx ? `(${ctx}) ` : '';
-        const msg = `${pfx}Resumen del día · Pedidos enviados: ${nSent}. · Recibidos (en pantalla): ${nRec}. · ${mealsPart} · ${cleanPart}`;
+        const msgParts = [
+          `${pfx}Resumen del día`,
+          `Pedidos enviados: ${nSent}.`,
+          `Recibidos (en pantalla): ${nRec}.`,
+          mealsPart,
+          cleanPart,
+        ].filter((part): part is string => Boolean(part));
+        const msg = msgParts.join(' · ');
         setAssistantReply(msg);
         pushAssistantHistory(raw, msg);
         return;
@@ -3430,7 +3448,7 @@ export default function PedidosPage() {
         (normalized.includes('trabajador') || normalized.includes('lista') || normalized.includes('quien')) &&
         (normalized.includes('comida') || normalized.includes('personal')) &&
         !normalized.includes('registra');
-      if (workersComidaListMatch) {
+      if (comidaPersonalEnabled && workersComidaListMatch) {
         if (!localId) return;
         const supabase = getSupabaseClient();
         if (!supabase) return;
@@ -3461,7 +3479,7 @@ export default function PedidosPage() {
             normalized.includes('gasto') ||
             normalized.includes('resumen') ||
             normalized.includes('llevamos')));
-      if (mealsTodayMatch) {
+      if (comidaPersonalEnabled && mealsTodayMatch) {
         const today = new Date().toISOString().slice(0, 10);
         if (!localId) return;
         const supabase = getSupabaseClient();
@@ -3486,7 +3504,7 @@ export default function PedidosPage() {
       }
 
       const ownMealMatch = normalized.match(/registra(?:r)?\s+comida\s+propia\s+(?:para|de)\s+(.+)/);
-      if (ownMealMatch) {
+      if (comidaPersonalEnabled && ownMealMatch) {
         if (!localId) return;
         const workerNeedle = normalizeText(ownMealMatch[1]).trim();
         const supabase = getSupabaseClient();
@@ -3534,7 +3552,7 @@ export default function PedidosPage() {
           (normalized.includes('elimina') && normalized.includes('ultim'))) &&
         normalized.includes('comida') &&
         !normalized.includes('registra');
-      if (voidWorkerCap?.[1]?.trim() && voidComidaHoyMatch) {
+      if (comidaPersonalEnabled && voidWorkerCap?.[1]?.trim() && voidComidaHoyMatch) {
         if (!localId) return;
         const supabase = getSupabaseClient();
         if (!supabase) return;
@@ -3573,7 +3591,7 @@ export default function PedidosPage() {
         pushAssistantHistory(raw, msg);
         return;
       }
-      if (voidComidaHoyMatch) {
+      if (comidaPersonalEnabled && voidComidaHoyMatch) {
         if (!localId) return;
         const supabase = getSupabaseClient();
         if (!supabase) return;
@@ -3781,6 +3799,7 @@ export default function PedidosPage() {
     articleNombreByProductId,
     catalogNameByProductId,
     canUseOidoChef,
+    comidaPersonalEnabled,
     commitSentOrderAsReceived,
     localCode,
     localId,
@@ -4098,7 +4117,7 @@ export default function PedidosPage() {
         </span>
         <div className="min-w-0">
           <h2 className="text-base font-bold text-zinc-900">Oído Chef</h2>
-          <p className="text-[11px] text-zinc-500">Precios, recepción, limpieza, comida del personal y más.</p>
+          <p className="text-[11px] text-zinc-500">Precios, recepción, limpieza, APPCC e inventario.</p>
         </div>
       </div>
 
@@ -4186,7 +4205,7 @@ export default function PedidosPage() {
           <div className="mt-2 space-y-2 border-t border-zinc-200/80 pt-2">
             <p className="text-xs leading-snug text-zinc-500">
               Catálogo 7: precio semanal · última compra · actualiza precio en proveedor · marcar recibido · limpieza ·
-              comida propia · top mermas · temperaturas. APPCC: estado hoy, aceite. Navegación y WhatsApp.
+              top mermas · temperaturas · inventario. APPCC: estado hoy, aceite. Navegación y WhatsApp.
             </p>
             <label className="flex cursor-pointer items-center gap-2 text-xs text-zinc-700">
               <input

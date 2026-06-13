@@ -51,18 +51,29 @@ import {
 } from '@/lib/app-role-permissions';
 import { getModuleAccess } from '@/lib/canAccessModule';
 import { APP_MODULE_HOME, getAppNavBreadcrumb, getParentRoute } from '@/lib/app-navigation';
+import { isModuleEnabled, type AppModuleId } from '@/lib/module-config';
 import { markPedidosUiSkipRestoreOnce } from '@/lib/pedidos-ui-session';
 
 type NavItemLink = {
   href?: string;
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
+  module?: AppModuleId;
   comingSoon?: boolean;
   blocked?: boolean;
   blockedText?: string;
 };
 
 type NavSectionGroup = { heading: string; items: NavItemLink[] };
+
+function enabledNavItem(item: NavItemLink): NavItemLink | null {
+  return item.module && !isModuleEnabled(item.module) ? null : item;
+}
+
+function pushEnabledNavItem(items: NavItemLink[], item: NavItemLink) {
+  const enabled = enabledNavItem(item);
+  if (enabled) items.push(enabled);
+}
 
 /** Activo en drawer: compara ruta base (sin hash). */
 function navEntryIsActive(pathname: string | null, entryHref: string): boolean {
@@ -255,57 +266,111 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     const sections: NavSectionGroup[] = [];
 
-    sections.push({
-      heading: 'Operativa',
-      items: [
-        { href: '/panel', label: 'Agenda del día', Icon: CalendarDays },
-        { href: '/dashboard', label: 'Mermas', Icon: BookOpen },
-      ],
-    });
+    const operativa: NavItemLink[] = [];
+    pushEnabledNavItem(operativa, { href: '/panel', label: 'Agenda del día', Icon: CalendarDays });
+    pushEnabledNavItem(operativa, { href: '/dashboard', label: 'Mermas', Icon: BookOpen, module: 'mermas' });
+    if (operativa.length) sections.push({ heading: 'Operativa', items: operativa });
 
     const gestion: NavItemLink[] = [];
     if (showPedidos && canAccessPedidosByRole(role)) {
-      gestion.push({ href: '/pedidos', label: 'Pedidos', Icon: ShoppingCart, blocked: isBlockedByPlan('pedidos') });
+      pushEnabledNavItem(gestion, {
+        href: '/pedidos',
+        label: 'Pedidos',
+        Icon: ShoppingCart,
+        module: 'pedidos',
+        blocked: isBlockedByPlan('pedidos'),
+      });
     }
-    gestion.push(
-      { href: '/produccion', label: 'Producción', Icon: Factory, blocked: isBlockedByPlan('produccion') },
-      { href: '/servicio', label: 'Servicio', Icon: Soup, blocked: isBlockedByPlan('servicio') },
-    );
+    pushEnabledNavItem(gestion, {
+      href: '/produccion',
+      label: 'Producción',
+      Icon: Factory,
+      module: 'produccion',
+      blocked: isBlockedByPlan('produccion'),
+    });
+    pushEnabledNavItem(gestion, {
+      href: '/servicio',
+      label: 'Servicio',
+      Icon: Soup,
+      module: 'servicio',
+      blocked: isBlockedByPlan('servicio'),
+    });
     if (canAccessInventario(role)) {
-      gestion.push({ href: '/inventario', label: 'Inventario', Icon: ClipboardList, blocked: isBlockedByPlan('inventario') });
+      pushEnabledNavItem(gestion, {
+        href: '/inventario',
+        label: 'Inventario',
+        Icon: ClipboardList,
+        module: 'inventario',
+        blocked: isBlockedByPlan('inventario'),
+      });
     }
     if (canAccessEscandallos(role)) {
-      gestion.push({ href: '/escandallos', label: 'Escandallos', Icon: Calculator, blocked: isBlockedByPlan('escandallos') });
+      pushEnabledNavItem(gestion, {
+        href: '/escandallos',
+        label: 'Escandallos',
+        Icon: Calculator,
+        module: 'escandallos',
+        blocked: isBlockedByPlan('escandallos'),
+      });
     }
     if (showPedidos && canAccessFinanzas(role)) {
-      gestion.push({
+      pushEnabledNavItem(gestion, {
         href: '/finanzas',
         label: 'Finanzas',
         Icon: BarChart3,
+        module: 'finanzas',
         blocked: isBlockedByPlan('finanzas'),
         blockedText: 'Disponible en plan superior',
       });
     }
     if (gestion.length) sections.push({ heading: 'Gestión', items: gestion });
 
-    sections.push({
-      heading: 'Control',
-      items: [
-        { href: '/appcc', label: 'APPCC', Icon: ShieldCheck, blocked: isBlockedByPlan('appcc') },
-        { href: '/checklist', label: 'Check list', Icon: ListChecks, blocked: isBlockedByPlan('checklist') },
-        { href: '/appcc/temperaturas', label: 'Temperaturas', Icon: Thermometer, blocked: isBlockedByPlan('appcc') },
-        { href: '/appcc/aceite/registro', label: 'Aceites', Icon: Droplets, blocked: isBlockedByPlan('appcc') },
-      ],
+    const control: NavItemLink[] = [];
+    pushEnabledNavItem(control, {
+      href: '/appcc',
+      label: 'APPCC',
+      Icon: ShieldCheck,
+      module: 'appcc',
+      blocked: isBlockedByPlan('appcc'),
     });
+    pushEnabledNavItem(control, {
+      href: '/checklist',
+      label: 'Check list',
+      Icon: ListChecks,
+      module: 'checklist',
+      blocked: isBlockedByPlan('checklist'),
+    });
+    pushEnabledNavItem(control, {
+      href: '/appcc/temperaturas',
+      label: 'Temperaturas',
+      Icon: Thermometer,
+      module: 'appcc',
+      blocked: isBlockedByPlan('appcc'),
+    });
+    pushEnabledNavItem(control, {
+      href: '/appcc/aceite/registro',
+      label: 'Aceites',
+      Icon: Droplets,
+      module: 'appcc',
+      blocked: isBlockedByPlan('appcc'),
+    });
+    if (control.length) sections.push({ heading: 'Control', items: control });
 
     const personal: NavItemLink[] = [
-      { href: '/personal', label: 'Horarios', Icon: CalendarDays, blocked: isBlockedByPlan('personal') },
+      {
+        href: '/personal',
+        label: 'Horarios',
+        Icon: CalendarDays,
+        module: 'personal',
+        blocked: isBlockedByPlan('personal'),
+      },
     ];
     if (canAccessComidaPersonal(role)) {
       personal.push({
         href: '/comida-personal',
         label: 'Consumo interno',
         Icon: UtensilsCrossed,
+        module: 'comida_personal',
         blocked: isBlockedByPlan('comida_personal'),
       });
     }
@@ -313,27 +378,46 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       href: '/personal/mi',
       label: 'Equipo',
       Icon: Users,
+      module: 'personal',
       blocked: isBlockedByPlan('personal'),
     });
     if (canAccessChat(role)) {
-      personal.push({ href: '/chat', label: 'Chat', Icon: MessageCircle, blocked: isBlockedByPlan('chat') });
+      personal.push({
+        href: '/chat',
+        label: 'Chat',
+        Icon: MessageCircle,
+        module: 'chat',
+        blocked: isBlockedByPlan('chat'),
+      });
     }
-    sections.push({ heading: 'Personal', items: personal });
+    const enabledPersonal = personal.filter((item): item is NavItemLink => enabledNavItem(item) !== null);
+    if (enabledPersonal.length) sections.push({ heading: 'Personal', items: enabledPersonal });
 
     const central: NavItemLink[] = [];
     if (showCocinaCentral && canAccessCocinaCentral(role)) {
-      central.push({
+      pushEnabledNavItem(central, {
         href: '/cocina-central',
         label: 'Cocina central',
         Icon: ChefHat,
+        module: 'cocina_central',
         blocked: isBlockedByPlan('cocina_central'),
       });
     }
     if (showPedidosCocina) {
-      central.push({ href: '/pedidos-cocina', label: 'Pedir a central', Icon: Package });
+      pushEnabledNavItem(central, {
+        href: '/pedidos-cocina',
+        label: 'Pedir a central',
+        Icon: Package,
+        module: 'pedidos_cocina',
+      });
     }
     if (isSuperadmin) {
-      central.push({ href: '/superadmin/locales', label: 'Multi-local', Icon: Building2 });
+      pushEnabledNavItem(central, {
+        href: '/superadmin/locales',
+        label: 'Multi-local',
+        Icon: Building2,
+        module: 'superadmin',
+      });
     }
     if (central.length) sections.push({ heading: 'Central', items: central });
 
@@ -621,7 +705,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </p>
               <p className="truncate text-zinc-500">{localLabel || `Plan ${planLabel(plan)}`}</p>
             </div>
-            {isSuperadmin ? (
+            {isSuperadmin && isModuleEnabled('superadmin') ? (
               <Link
                 href="/superadmin/locales"
                 onClick={() => setOpen(false)}

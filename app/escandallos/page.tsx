@@ -62,6 +62,7 @@ import {
 import { fetchEscandalloRecipeCategoriasMap } from '@/lib/finanzas-rentabilidad-escandallo';
 import { formatMoneyEur } from '@/lib/money-format';
 import { fetchCentralKitchenPublicCatalog, type EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
+import { isModuleEnabled } from '@/lib/module-config';
 import {
   buildExecutiveProfitabilityReportData,
   type ExecutiveReportSourceRow,
@@ -548,6 +549,7 @@ export default function EscandallosPage() {
   const searchParams = useSearchParams();
   const { localId, localName, profileReady } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
+  const centralKitchenEnabled = isModuleEnabled('cocina_central');
   const [recipes, setRecipes] = useState<EscandalloRecipe[]>([]);
   const [linesByRecipe, setLinesByRecipe] = useState<Record<string, EscandalloLine[]>>({});
   const [rawProducts, setRawProducts] = useState<EscandalloRawProduct[]>([]);
@@ -645,7 +647,9 @@ export default function EscandallosPage() {
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloRecipeCategoriasMap(supabase, localId),
         fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
-        fetchCentralKitchenPublicCatalog(supabase, localId).catch(() => [] as EscandalloCentralKitchenCatalogItem[]),
+        centralKitchenEnabled
+          ? fetchCentralKitchenPublicCatalog(supabase, localId).catch(() => [] as EscandalloCentralKitchenCatalogItem[])
+          : Promise.resolve([] as EscandalloCentralKitchenCatalogItem[]),
       ]);
       setRecipes(r);
       setRawProducts(raw);
@@ -664,7 +668,7 @@ export default function EscandallosPage() {
     } finally {
       setLoading(false);
     }
-  }, [localId, supabaseOk]);
+  }, [localId, supabaseOk, centralKitchenEnabled]);
 
   useEffect(() => {
     if (!profileReady) return;

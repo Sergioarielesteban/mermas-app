@@ -44,6 +44,7 @@ import {
 } from '@/lib/escandallo-articulos-nav';
 import { fetchEscandalloRawProductsWithWeightedPurchasePrices } from '@/lib/escandallos-supabase';
 import { useOperationalAutoCollapse } from '@/lib/use-operational-auto-collapse';
+import { isModuleEnabled } from '@/lib/module-config';
 import SupplierProductSearchInput from '@/components/inventory/SupplierProductSearchInput';
 import {
   fetchInventorySupplierProductsForSearch,
@@ -95,6 +96,7 @@ export default function PedidosArticulosPage() {
   const hasPedidosEntry = canAccessPedidos(localCode, email, localName, localId);
   const canUse = canUsePedidosModule(localCode, email, localName, localId);
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
+  const cocinaCentralEnabled = isModuleEnabled('cocina_central');
 
   const [articles, setArticles] = useState<PurchaseArticle[]>([]);
   const [catalogByArticle, setCatalogByArticle] = useState<Map<string, SupplierCatalogRow[]>>(new Map());
@@ -193,11 +195,17 @@ export default function PedidosArticulosPage() {
     setHasArticulosReturn(readEscandalloWizardArticulosReturn(localId) !== null);
   }, [localId]);
 
+  useEffect(() => {
+    if (!cocinaCentralEnabled && origenFilter === 'cocina_central') {
+      setOrigenFilter('todos');
+    }
+  }, [cocinaCentralEnabled, origenFilter]);
+
   const ccCount = useMemo(() => articles.filter((a) => a.origenArticulo === 'cocina_central').length, [articles]);
 
   const filtered = useMemo(() => {
     let list =
-      origenFilter === 'cocina_central'
+      origenFilter === 'cocina_central' && cocinaCentralEnabled
         ? articles.filter((a) => a.origenArticulo === 'cocina_central')
         : origenFilter === 'proveedor'
           ? articles.filter((a) => a.origenArticulo !== 'cocina_central')
@@ -217,7 +225,7 @@ export default function PedidosArticulosPage() {
         catalogNames.toLowerCase().includes(t)
       );
     });
-  }, [articles, catalogByArticle, q, origenFilter, estadoFilter]);
+  }, [articles, catalogByArticle, cocinaCentralEnabled, q, origenFilter, estadoFilter]);
 
   useOperationalAutoCollapse({
     activeId: expandedArticleId,
@@ -270,7 +278,7 @@ export default function PedidosArticulosPage() {
             <p className="text-[11px] leading-tight text-zinc-600 sm:text-xs">
               <span className="font-bold tabular-nums text-zinc-900">{filtered.length}</span> artículos
               {q.trim() || origenFilter !== 'todos' || estadoFilter !== 'activos' ? ' · filtrado' : ''}
-              {ccCount > 0 ? (
+              {cocinaCentralEnabled && ccCount > 0 ? (
                 <span className="text-zinc-500">
                   {' '}
                   · <span className="tabular-nums">{ccCount}</span> Cocina Central
@@ -294,12 +302,17 @@ export default function PedidosArticulosPage() {
             Cerrar todo
           </button>
         </div>
-        <div className="mt-2 grid grid-cols-3 gap-0.5 rounded-full bg-zinc-100/70 p-0.5 ring-1 ring-zinc-200/50 sm:inline-grid sm:min-w-[18rem]">
+        <div
+          className={[
+            'mt-2 grid gap-0.5 rounded-full bg-zinc-100/70 p-0.5 ring-1 ring-zinc-200/50 sm:inline-grid',
+            cocinaCentralEnabled ? 'grid-cols-3 sm:min-w-[18rem]' : 'grid-cols-2 sm:min-w-[12rem]',
+          ].join(' ')}
+        >
           {(
             [
               ['todos', 'Todos'],
               ['proveedor', 'Proveedor'],
-              ['cocina_central', 'Cocina Central'],
+              ...(cocinaCentralEnabled ? ([['cocina_central', 'Cocina Central']] as const) : []),
             ] as const
           ).map(([key, label]) => (
             <button
@@ -366,7 +379,7 @@ export default function PedidosArticulosPage() {
         <p className="rounded-2xl bg-zinc-50 py-10 text-center text-sm text-zinc-600 ring-1 ring-zinc-200">
           {articles.length === 0
             ? 'Aún no hay artículos. Alta en Proveedores o revisa la configuración del local.'
-            : origenFilter === 'cocina_central' && ccCount === 0
+            : cocinaCentralEnabled && origenFilter === 'cocina_central' && ccCount === 0
               ? 'No hay artículos de Cocina Central en este local.'
               : estadoFilter === 'inactivos' && articles.every((x) => x.activo)
                 ? 'No hay artículos inactivos. Prueba «Activos» o «Todos».'
@@ -425,6 +438,7 @@ function ArticleCard({
 }) {
   const { localId } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
+  const cocinaCentralEnabled = isModuleEnabled('cocina_central');
   const [activoBusy, setActivoBusy] = useState(false);
   const [activoErr, setActivoErr] = useState<string | null>(null);
   const [masterBusy, setMasterBusy] = useState(false);
@@ -536,7 +550,31 @@ function ArticleCard({
     }
   };
 
-  if (isCc) {
+  const originId = a.createdFromSupplierProductId;
+  const preferredId = a.proveedorPreferidoId;
+  const mergedCatalogRows = useMemo(() => {
+    const byId = new Map<string, SupplierCatalogRow>();
+    for (const row of catalogRows) byId.set(row.id, row);
+    if (pickedCatalogRow) byId.set(pickedCatalogRow.id, pickedCatalogRow);
+    return [...byId.values()];
+  }, [catalogRows, pickedCatalogRow]);
+  const activeRows = mergedCatalogRows.filter((r) => r.isActive);
+  const compareRows = activeRows.length > 0 ? activeRows : mergedCatalogRows;
+
+  useEffect(() => {
+    if (compareRows.length === 0) return;
+    const saved =
+      a.referenciaPrincipalSupplierProductId ?? a.createdFromSupplierProductId ?? '';
+    if (saved && compareRows.some((r) => r.id === saved)) {
+      if (refProdId !== saved) setRefProdId(saved);
+      return;
+    }
+    if (!refProdId && compareRows.length === 1) {
+      setRefProdId(compareRows[0].id);
+    }
+  }, [a.id, a.referenciaPrincipalSupplierProductId, a.createdFromSupplierProductId, compareRows, refProdId]);
+
+  if (isCc && cocinaCentralEnabled) {
     const uso = (a.unidadUso ?? a.unidadBase ?? '').trim() || '—';
     const cup = a.costeUnitarioUso ?? a.costeMaster;
     const ccMeta = [
@@ -625,30 +663,6 @@ function ArticleCard({
       </li>
     );
   }
-
-  const originId = a.createdFromSupplierProductId;
-  const preferredId = a.proveedorPreferidoId;
-  const mergedCatalogRows = useMemo(() => {
-    const byId = new Map<string, SupplierCatalogRow>();
-    for (const row of catalogRows) byId.set(row.id, row);
-    if (pickedCatalogRow) byId.set(pickedCatalogRow.id, pickedCatalogRow);
-    return [...byId.values()];
-  }, [catalogRows, pickedCatalogRow]);
-  const activeRows = mergedCatalogRows.filter((r) => r.isActive);
-  const compareRows = activeRows.length > 0 ? activeRows : mergedCatalogRows;
-
-  useEffect(() => {
-    if (compareRows.length === 0) return;
-    const saved =
-      a.referenciaPrincipalSupplierProductId ?? a.createdFromSupplierProductId ?? '';
-    if (saved && compareRows.some((r) => r.id === saved)) {
-      if (refProdId !== saved) setRefProdId(saved);
-      return;
-    }
-    if (!refProdId && compareRows.length === 1) {
-      setRefProdId(compareRows[0].id);
-    }
-  }, [a.id, a.referenciaPrincipalSupplierProductId, a.createdFromSupplierProductId, compareRows, refProdId]);
   const minCatalog =
     compareRows.length > 0 ? Math.min(...compareRows.map((r) => r.pricePerUnit)) : null;
   const maxCatalog =

@@ -36,6 +36,7 @@ import type {
 } from '@/lib/escandallos-technical-sheet-supabase';
 import type { RecipeAllergenRow } from '@/lib/appcc-allergens-supabase';
 import { fetchCentralKitchenPublicCatalog, type EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
+import { isModuleEnabled } from '@/lib/module-config';
 
 type CatFilter = string;
 type PvpFilter = 'all' | 'with' | 'without';
@@ -47,6 +48,7 @@ export default function EscandallosRecetasLibroClient() {
   const { localId, profileReady } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
   const demoPack = isDemoMode() && Boolean(localId) && !supabaseOk;
+  const centralKitchenEnabled = isModuleEnabled('cocina_central');
 
   const [recipes, setRecipes] = useState<EscandalloRecipe[]>([]);
   const [linesByRecipe, setLinesByRecipe] = useState<Record<string, EscandalloLine[]>>({});
@@ -104,7 +106,9 @@ export default function EscandallosRecetasLibroClient() {
         fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
-        fetchCentralKitchenPublicCatalog(supabase, localId).catch(() => [] as EscandalloCentralKitchenCatalogItem[]),
+        centralKitchenEnabled
+          ? fetchCentralKitchenPublicCatalog(supabase, localId).catch(() => [] as EscandalloCentralKitchenCatalogItem[])
+          : Promise.resolve([] as EscandalloCentralKitchenCatalogItem[]),
       ]);
       setRecipes(r);
       setRawProducts(raw);
@@ -123,7 +127,7 @@ export default function EscandallosRecetasLibroClient() {
     } finally {
       setLoading(false);
     }
-  }, [localId, supabaseOk, demoPack]);
+  }, [localId, supabaseOk, demoPack, centralKitchenEnabled]);
 
   useEffect(() => {
     if (!profileReady) return;

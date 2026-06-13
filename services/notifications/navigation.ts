@@ -1,3 +1,5 @@
+import { getEnabledHrefOrNull } from '@/lib/module-config';
+
 /**
  * Destino al pulsar una notificación (si aplica).
  */
@@ -9,30 +11,30 @@ export function getNotificationHref(
   if (!entityType) return null;
   switch (entityType) {
     case 'purchase_order':
-      return '/pedidos';
+      return getEnabledHrefOrNull('/pedidos');
     case 'merma':
-      return '/dashboard';
+      return getEnabledHrefOrNull('/dashboard');
     case 'inventory_closure':
-      return '/inventario';
+      return getEnabledHrefOrNull('/inventario');
     case 'chat_message':
-      return '/chat';
+      return getEnabledHrefOrNull('/chat');
     case 'appcc_temperature_reading': {
       const d = metadata.dateKey;
       if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
-        return `/appcc/temperaturas?d=${encodeURIComponent(d)}`;
+        return getEnabledHrefOrNull(`/appcc/temperaturas?d=${encodeURIComponent(d)}`);
       }
-      return '/appcc/temperaturas';
+      return getEnabledHrefOrNull('/appcc/temperaturas');
     }
     case 'empresa_norma':
-      return '/personal/manual-normas/normas';
+      return getEnabledHrefOrNull('/personal/manual-normas/normas');
     case 'manual_procedimiento':
-      return '/personal/manual-normas/operaciones';
+      return getEnabledHrefOrNull('/personal/manual-normas/operaciones');
     case 'staff_week_schedule': {
       const w = metadata.week_start_monday;
       if (typeof w === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(w)) {
-        return `/personal/mi/turnos?semana=${encodeURIComponent(w)}`;
+        return getEnabledHrefOrNull(`/personal/mi/turnos?semana=${encodeURIComponent(w)}`);
       }
-      return '/personal/mi/turnos';
+      return getEnabledHrefOrNull('/personal/mi/turnos');
     }
     default:
       if (entityId && entityType.startsWith('custom:')) {

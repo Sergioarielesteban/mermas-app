@@ -10,7 +10,7 @@ import {
 } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import type { MarketingModuleDefinition } from './moduleDefinitions';
-import { MARKETING_MODULES } from './moduleDefinitions';
+import { ENABLED_MARKETING_MODULES } from './moduleDefinitions';
 
 const BRAND = '#D32F2F';
 
@@ -196,7 +196,7 @@ function PremiumExpandableCard({ mod, isOpen, onToggle }: CardProps) {
 }
 
 export type PremiumSaaSModuleCardsProps = {
-  /** Por defecto la lista de módulos del producto (MARKETING_MODULES); puedes pasar otra lista para pruebas */
+  /** Por defecto la lista de módulos activos del producto; puedes pasar otra lista para pruebas */
   modules?: MarketingModuleDefinition[];
   className?: string;
 };
@@ -206,7 +206,7 @@ export type PremiumSaaSModuleCardsProps = {
  * Una sola abierta; tilt 3D suave en desktop; tap claro en móvil.
  */
 export default function PremiumSaaSModuleCards({
-  modules = MARKETING_MODULES,
+  modules = ENABLED_MARKETING_MODULES,
   className = '',
 }: PremiumSaaSModuleCardsProps) {
   const [openId, setOpenId] = useState<string | null>(null);

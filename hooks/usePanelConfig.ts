@@ -29,6 +29,7 @@ import {
 } from '@/lib/app-role-permissions';
 import { canAccessPedidos } from '@/lib/pedidos-access';
 import { getModuleAccess } from '@/lib/canAccessModule';
+import { isModuleEnabled } from '@/lib/module-config';
 
 /**
  * Estado de configuración del panel + permisos resueltos.
@@ -188,7 +189,10 @@ export function usePanelConfig(): UsePanelConfigResult {
     };
 
     return PANEL_BLOCKS.filter(
-      (b) => planAllows(b.requiresPlanModule) && permissionAllows(b.requiresPermission),
+      (b) =>
+        isModuleEnabled(b.module) &&
+        planAllows(b.requiresPlanModule) &&
+        permissionAllows(b.requiresPermission),
     );
   }, [
     auth.email,
@@ -266,8 +270,9 @@ export function usePanelConfig(): UsePanelConfigResult {
     (presetId: PanelPresetId) => {
       const preset = PANEL_PRESET_BY_ID[presetId];
       if (!preset) return;
-      const order = preset.order.filter((id) => id in PANEL_BLOCK_BY_ID);
-      const favorites = preset.favorites.filter((id) => id in PANEL_BLOCK_BY_ID);
+      const availableIds = new Set(availableBlocks.map((b) => b.id));
+      const order = preset.order.filter((id) => availableIds.has(id));
+      const favorites = preset.favorites.filter((id) => availableIds.has(id));
       // Hidden = todo lo disponible que no esté en `order` y no sea crítico.
       const orderSet = new Set(order);
       const hidden = availableBlocks

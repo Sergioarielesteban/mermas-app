@@ -77,6 +77,7 @@ import {
 } from '@/lib/escandallo-operational-usage';
 import { totalInputWeightKg } from '@/lib/escandallo-input-weight';
 import { fetchCentralKitchenPublicCatalog, type EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
+import { isModuleEnabled } from '@/lib/module-config';
 
 type RecipeKind = 'plato' | 'base' | 'elaboracion';
 type NewStepDraft = TechnicalSheetStepDraft & {
@@ -116,6 +117,7 @@ export default function EscandalloNewRecipeWizard() {
   const searchParams = useSearchParams();
   const { localId, profileReady } = useAuth();
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
+  const centralKitchenEnabled = isModuleEnabled('cocina_central');
 
   const [step, setStep] = useState(0);
   const [recipes, setRecipes] = useState<EscandalloRecipe[]>([]);
@@ -291,7 +293,9 @@ export default function EscandalloNewRecipeWizard() {
         fetchProcessedProductsForEscandallo(supabase, localId),
         fetchEscandalloRecipeCategoriasMap(supabase, localId),
         fetchEscandalloTechnicalSheetsMap(supabase, localId).catch(() => new Map<string, EscandalloTechnicalSheet>()),
-        fetchCentralKitchenPublicCatalog(supabase, localId).catch(() => [] as EscandalloCentralKitchenCatalogItem[]),
+        centralKitchenEnabled
+          ? fetchCentralKitchenPublicCatalog(supabase, localId).catch(() => [] as EscandalloCentralKitchenCatalogItem[])
+          : Promise.resolve([] as EscandalloCentralKitchenCatalogItem[]),
       ]);
       setRecipes(r);
       setRawProducts(raw);
@@ -316,7 +320,7 @@ export default function EscandalloNewRecipeWizard() {
     } finally {
       setLoading(false);
     }
-  }, [localId, supabaseOk]);
+  }, [localId, supabaseOk, centralKitchenEnabled]);
 
   useEffect(() => {
     if (!profileReady) return;

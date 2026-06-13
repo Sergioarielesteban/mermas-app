@@ -21,6 +21,7 @@ import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet
 import { formatMoneyEur, formatUnitPriceEur } from '@/lib/money-format';
 import { rawIngredientWeightDetail } from '@/lib/escandallo-input-weight';
 import type { EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
+import { isModuleEnabled } from '@/lib/module-config';
 
 export type EscandalloIngredientDraftEditorProps = {
   drafts: IngredientDraftRow[];
@@ -187,9 +188,14 @@ export default function EscandalloIngredientDraftEditor({
   onSubmitDrafts,
   variant = 'default',
 }: EscandalloIngredientDraftEditorProps) {
+  const centralKitchenEnabled = isModuleEnabled('cocina_central');
+  const enabledCentralKitchenProducts = React.useMemo(
+    () => (centralKitchenEnabled ? centralKitchenProducts : []),
+    [centralKitchenEnabled, centralKitchenProducts],
+  );
   const centralKitchenById = React.useMemo(
-    () => new Map(centralKitchenProducts.map((item) => [item.id, item])),
-    [centralKitchenProducts],
+    () => new Map(enabledCentralKitchenProducts.map((item) => [item.id, item])),
+    [enabledCentralKitchenProducts],
   );
 
   const updateRow = (key: string, patch: Partial<IngredientDraftRow>) => {
@@ -255,7 +261,8 @@ export default function EscandalloIngredientDraftEditor({
         );
     }
     if (sourceType === 'central_kitchen') {
-      return centralKitchenProducts
+      if (!centralKitchenEnabled) return [];
+      return enabledCentralKitchenProducts
         .filter((p) => p.active)
         .filter((p) => !s || `${p.name} ${p.category ?? ''}`.toLowerCase().includes(s))
         .slice(0, s ? 18 : 10)
@@ -389,12 +396,12 @@ export default function EscandalloIngredientDraftEditor({
           technicalSheetsByRecipe,
         )
       : null;
-    const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts, centralKitchenProducts);
+    const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts, enabledCentralKitchenProducts);
     const configured = draftRowConfigured(row);
     const rawProduct = row.sourceType === 'raw' && row.rawId ? sortedRaw.find((x) => x.id === row.rawId) : null;
     const centralItem =
       row.sourceType === 'central_kitchen' && row.centralKitchenId
-        ? centralKitchenProducts.find((x) => x.id === row.centralKitchenId) ?? null
+        ? enabledCentralKitchenProducts.find((x) => x.id === row.centralKitchenId) ?? null
         : null;
     const centralUnitWarning =
       centralItem && !unitCompatible(centralItem.outputUnit, row.unit) && centralItem.outputUnit !== row.unit
@@ -441,7 +448,7 @@ export default function EscandalloIngredientDraftEditor({
                 <option value="raw">Crudo</option>
                 <option value="processed">Elaborado</option>
                 <option value="subrecipe">Base</option>
-                <option value="central_kitchen">Cocina Central</option>
+                {centralKitchenEnabled ? <option value="central_kitchen">Cocina Central</option> : null}
                 <option value="manual">Manual</option>
               </select>
 
@@ -465,7 +472,7 @@ export default function EscandalloIngredientDraftEditor({
                           centralKitchenId: '',
                         })
                       }
-                      placeholder="Buscar artículos, bases o Cocina Central…"
+                      placeholder={centralKitchenEnabled ? 'Buscar artículos, bases o Cocina Central…' : 'Buscar artículos o bases…'}
                       className="h-7 w-full rounded-lg border border-[rgba(10,9,8,0.08)] bg-white py-1 pl-8 pr-2 text-[11px] font-medium text-[#0A0908] outline-none focus:border-[#D32F2F]/35 focus:ring-1 focus:ring-[#D32F2F]/10"
                     />
                     {row.rawDropdownOpen ? (
@@ -676,11 +683,11 @@ export default function EscandalloIngredientDraftEditor({
         const subrecipeConfig =
           row.sourceType === 'subrecipe' ? getSubrecipeOperationalConfig(row, recipesById, technicalSheetsByRecipe) : null;
         const qtyNum = parseDecimal(row.qty);
-        const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts, centralKitchenProducts);
+        const dispUnit = displayUnitForRow(row, sortedRaw, processedProducts, enabledCentralKitchenProducts);
         const rawProduct = row.sourceType === 'raw' && row.rawId ? sortedRaw.find((x) => x.id === row.rawId) : null;
         const centralItem =
           row.sourceType === 'central_kitchen' && row.centralKitchenId
-            ? centralKitchenProducts.find((x) => x.id === row.centralKitchenId) ?? null
+            ? enabledCentralKitchenProducts.find((x) => x.id === row.centralKitchenId) ?? null
             : null;
         const rawWeightDetail =
           row.sourceType === 'raw' && rawProduct && qtyNum != null
@@ -739,7 +746,7 @@ export default function EscandalloIngredientDraftEditor({
                   <option value="raw">Crudo</option>
                   <option value="processed">Elaborado</option>
                   <option value="subrecipe">Base</option>
-                  <option value="central_kitchen">Cocina Central</option>
+                  {centralKitchenEnabled ? <option value="central_kitchen">Cocina Central</option> : null}
                   <option value="manual">Manual</option>
                 </select>
               </div>
@@ -766,7 +773,7 @@ export default function EscandalloIngredientDraftEditor({
                           centralKitchenId: '',
                         });
                       }}
-                      placeholder="Buscar artículos, bases o Cocina Central…"
+                      placeholder={centralKitchenEnabled ? 'Buscar artículos, bases o Cocina Central…' : 'Buscar artículos o bases…'}
                       className="min-h-[48px] w-full rounded-xl border-2 border-zinc-200 bg-white py-3 pl-11 pr-3 text-base leading-snug outline-none transition focus:border-[#D32F2F]/50 focus:ring-2 focus:ring-[#D32F2F]/15 sm:min-h-0 sm:py-2.5 sm:text-sm"
                     />
                     {row.rawDropdownOpen ? (

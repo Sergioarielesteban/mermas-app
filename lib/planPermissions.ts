@@ -45,6 +45,7 @@ export function moduleForPath(pathname: string | null): PlanModule | null {
   if (!pathname) return null;
   if (pathname === '/dashboard' || pathname === '/' || pathname.startsWith('/dashboard/')) return 'mermas';
   if (pathname.startsWith('/productos') || pathname.startsWith('/resumen')) return 'mermas';
+  if (pathname.startsWith('/pedidos-cocina')) return 'cocina_central';
   if (pathname.startsWith('/pedidos')) return 'pedidos';
   if (pathname.startsWith('/appcc')) return 'appcc';
   if (pathname.startsWith('/checklist')) return 'checklist';

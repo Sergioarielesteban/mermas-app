@@ -31,12 +31,12 @@ const problemPoints = [
 ] as const;
 
 const realUseCards = [
-  'Turno de mañana publica checklist y deja todo trazado para noche.',
+  'Turno de mañana deja pedidos y recepciones claros para noche.',
   'Recepción detecta subida de coste al validar albarán.',
   'Encargado revisa mermas del día antes de volver a pedir.',
   'Auditoría APPCC con registros listos en minutos.',
-  'Cambio de personal sin perder procesos ni contexto.',
-  'Cierre semanal con datos de coste y consumo interno claros.',
+  'Inventario revisado desde móvil antes del cierre.',
+  'Escandallo actualizado cuando cambia el coste de un ingrediente.',
 ] as const;
 
 const benefitBlocks = [

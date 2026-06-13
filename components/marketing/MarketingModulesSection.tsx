@@ -1,42 +1,57 @@
+import type { ComponentType } from 'react';
 import { ClipboardList, HandCoins, MessageCircle, ShieldCheck, ShoppingCart, Users } from 'lucide-react';
+import { isModuleEnabled, type AppModuleId } from '@/lib/module-config';
+
+type MarketingModuleItem = {
+  name: string;
+  desc: string;
+  Icon: ComponentType<{ className?: string }>;
+  module: AppModuleId;
+};
 
 const CATEGORY_BLOCKS = [
   {
     title: 'Operativa diaria',
     modules: [
-      { name: 'Pedidos', desc: 'Pide, recibe y valida albaranes con orden.', Icon: ShoppingCart },
-      { name: 'Recepción', desc: 'Todo lo que entra queda trazado y claro.', Icon: ClipboardList },
-      { name: 'Precios', desc: 'Detecta cambios antes de que te descuadren.', Icon: HandCoins },
-      { name: 'OCR', desc: 'Captura datos del albarán en segundos.', Icon: ClipboardList },
+      { name: 'Pedidos', desc: 'Pide, recibe y valida albaranes con orden.', Icon: ShoppingCart, module: 'pedidos' },
+      { name: 'Recepción', desc: 'Todo lo que entra queda trazado y claro.', Icon: ClipboardList, module: 'pedidos' },
+      { name: 'Precios', desc: 'Detecta cambios antes de que te descuadren.', Icon: HandCoins, module: 'pedidos' },
+      { name: 'OCR', desc: 'Captura datos del albarán en segundos.', Icon: ClipboardList, module: 'pedidos' },
     ],
   },
   {
     title: 'Control económico',
     modules: [
-      { name: 'Mermas', desc: 'Registra pérdidas y su impacto real.', Icon: HandCoins },
-      { name: 'Escandallos', desc: 'Coste de plato y margen actualizado.', Icon: HandCoins },
-      { name: 'Finanzas', desc: 'Entiende si ganas o pierdes dinero en tiempo real.', Icon: HandCoins },
-      { name: 'Consumo interno', desc: 'Controla la comida de personal sin Excel.', Icon: ClipboardList },
+      { name: 'Mermas', desc: 'Registra pérdidas y su impacto real.', Icon: HandCoins, module: 'mermas' },
+      { name: 'Inventario', desc: 'Stock y valor por local, desde el móvil.', Icon: ClipboardList, module: 'inventario' },
+      { name: 'Escandallos', desc: 'Coste de plato y margen actualizado.', Icon: HandCoins, module: 'escandallos' },
+      { name: 'Finanzas', desc: 'Entiende si ganas o pierdes dinero en tiempo real.', Icon: HandCoins, module: 'finanzas' },
+      { name: 'Consumo interno', desc: 'Controla la comida de personal sin Excel.', Icon: ClipboardList, module: 'comida_personal' },
     ],
   },
   {
     title: 'Seguridad y cumplimiento',
     modules: [
-      { name: 'APPCC', desc: 'Registros listos para auditorías e inspecciones.', Icon: ShieldCheck },
-      { name: 'Alérgenos', desc: 'Información sensible siempre a mano.', Icon: ShieldCheck },
-      { name: 'Checklists', desc: 'Apertura, cierre y rutinas sin huecos.', Icon: ClipboardList },
+      { name: 'APPCC', desc: 'Registros listos para auditorías e inspecciones.', Icon: ShieldCheck, module: 'appcc' },
+      { name: 'Alérgenos', desc: 'Información sensible siempre a mano.', Icon: ShieldCheck, module: 'appcc' },
+      { name: 'Checklists', desc: 'Apertura, cierre y rutinas sin huecos.', Icon: ClipboardList, module: 'checklist' },
     ],
   },
   {
     title: 'Equipo y operación',
     modules: [
-      { name: 'Equipo', desc: 'Roles y permisos por local en un toque.', Icon: Users },
-      { name: 'Horarios', desc: 'Turnos visibles para todo el equipo.', Icon: Users },
-      { name: 'Comunicación', desc: 'Avisos y decisiones dentro de la app.', Icon: MessageCircle },
-      { name: 'Manual operativo', desc: 'Procedimientos claros para cada turno.', Icon: ClipboardList },
+      { name: 'Equipo', desc: 'Roles y permisos por local en un toque.', Icon: Users, module: 'personal' },
+      { name: 'Horarios', desc: 'Turnos visibles para todo el equipo.', Icon: Users, module: 'personal' },
+      { name: 'Comunicación', desc: 'Avisos y decisiones dentro de la app.', Icon: MessageCircle, module: 'comunicacion' },
+      { name: 'Manual operativo', desc: 'Procedimientos claros para cada turno.', Icon: ClipboardList, module: 'personal' },
     ],
   },
-] as const;
+] as const satisfies readonly { title: string; modules: readonly MarketingModuleItem[] }[];
+
+const ENABLED_CATEGORY_BLOCKS = CATEGORY_BLOCKS.map((category) => ({
+  ...category,
+  modules: category.modules.filter((mod) => isModuleEnabled(mod.module)),
+})).filter((category) => category.modules.length > 0);
 
 export default function MarketingModulesSection() {
   return (
@@ -57,7 +72,7 @@ export default function MarketingModulesSection() {
         </div>
 
         <div className="mt-12 grid gap-6 lg:grid-cols-2">
-          {CATEGORY_BLOCKS.map((category) => (
+          {ENABLED_CATEGORY_BLOCKS.map((category) => (
             <article
               key={category.title}
               className="rounded-[20px] border border-stone-200/70 bg-white p-5 transition-all duration-300 ease-out [box-shadow:0_10px_30px_rgba(0,0,0,0.06)] hover:-translate-y-1 hover:[box-shadow:0_20px_50px_rgba(0,0,0,0.08)] sm:p-6"

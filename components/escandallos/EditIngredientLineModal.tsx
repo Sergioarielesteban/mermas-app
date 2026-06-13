@@ -31,6 +31,7 @@ import type {
 import type { EscandalloCentralKitchenCatalogItem } from '@/lib/central-kitchen-public-catalog';
 import type { EscandalloTechnicalSheet } from '@/lib/escandallos-technical-sheet-supabase';
 import type { ArticleUsageFormat } from '@/lib/purchase-articles-supabase';
+import { isModuleEnabled } from '@/lib/module-config';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -65,12 +66,12 @@ function parseLineLabel(label: string): { supplier?: string; name: string } {
   return { name: label };
 }
 
-function sourceBadgeLabel(sourceType: EscandalloLine['sourceType']): string {
+function sourceBadgeLabel(sourceType: EscandalloLine['sourceType'], centralKitchenEnabled: boolean): string {
   switch (sourceType) {
     case 'raw': return 'Crudo / Proveedor';
     case 'processed': return 'Elaboración';
     case 'subrecipe': return 'Base / Sub-receta';
-    case 'central_kitchen': return 'Cocina Central';
+    case 'central_kitchen': return centralKitchenEnabled ? 'Cocina Central' : 'Elaboración';
     case 'manual': return 'Manual';
   }
 }
@@ -91,6 +92,7 @@ export default function EditIngredientLineModal({
   onSave,
   onClose,
 }: EditIngredientLineModalProps) {
+  const centralKitchenEnabled = isModuleEnabled('cocina_central');
   const parsed = parseLineLabel(line.label);
 
   // ── Estado del formulario ─────────────────────────────────────────────────
@@ -225,7 +227,7 @@ export default function EditIngredientLineModal({
         <div className="flex items-center gap-3 px-5 pb-3 pt-5">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#7E7468]">
-              Editar ingrediente · {sourceBadgeLabel(line.sourceType)}
+              Editar ingrediente · {sourceBadgeLabel(line.sourceType, centralKitchenEnabled)}
             </p>
             <p className="mt-0.5 truncate text-[16px] font-black leading-tight text-[#0A0908]">
               {parsed.name}

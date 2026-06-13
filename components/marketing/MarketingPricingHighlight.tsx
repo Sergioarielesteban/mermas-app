@@ -1,21 +1,22 @@
 import Link from 'next/link';
 import { Check } from 'lucide-react';
+import { isModuleEnabled, type AppModuleId } from '@/lib/module-config';
 
 const BRAND = '#D32F2F';
 
+const v1ModuleLabels: readonly { module: AppModuleId; label: string }[] = [
+  { module: 'pedidos', label: 'Pedidos y recepción' },
+  { module: 'inventario', label: 'Inventario' },
+  { module: 'mermas', label: 'Mermas' },
+  { module: 'appcc', label: 'APPCC completo' },
+  { module: 'escandallos', label: 'Escandallos' },
+];
+
 const plans = [
   {
-    name: 'Operativo',
-    modules: ['Pedidos', 'Recepción', 'Mermas', 'Chat interno'],
-  },
-  {
-    name: 'Control',
-    modules: ['Todo Operativo', 'Escandallos', 'Finanzas', 'Inventario'],
+    name: 'Chef One V1',
+    modules: v1ModuleLabels.filter((item) => isModuleEnabled(item.module)).map((item) => item.label),
     recommended: true,
-  },
-  {
-    name: 'PRO',
-    modules: ['Todo Control', 'APPCC completo', 'Equipo y horarios', 'Soporte prioritario'],
   },
 ] as const;
 
