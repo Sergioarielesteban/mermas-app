@@ -20,7 +20,7 @@ import {
   effectiveRecipeYieldQtyForCost,
   type EscandalloLine,
 } from '@/lib/escandallos-supabase';
-import { recalculateRecipeCost } from '@/lib/escandallos-cost-engine';
+import { recalculateRecipeCost, resolveEscandalloLineCost } from '@/lib/escandallos-cost-engine';
 import { uid } from '@/lib/id';
 import { getDemoMermasStore } from '@/lib/demo-dataset';
 import { isDemoMode } from '@/lib/demo-mode';
@@ -933,6 +933,113 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
       const supabase = getSupabaseClient();
       if (!supabase) return { unitCost: Math.max(0, manual ?? 0), originUsed: 'manual' };
 
+      type EscandalloPricingGraph = {
+        recipesById: Map<string, Awaited<ReturnType<typeof fetchEscandalloRecipes>>[number]>;
+        rawProductById: Map<string, Awaited<ReturnType<typeof fetchEscandalloRawProductsWithWeightedPurchasePrices>>[number]>;
+        processedById: Map<string, Awaited<ReturnType<typeof fetchProcessedProductsForEscandallo>>[number]>;
+        linesByRecipe: Record<string, EscandalloLine[]>;
+      };
+
+      const loadEscandalloPricingGraph = async (): Promise<EscandalloPricingGraph> => {
+        const [recipes, rawProducts, processed] = await Promise.all([
+          fetchEscandalloRecipes(supabase, localId),
+          fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
+          fetchProcessedProductsForEscandallo(supabase, localId),
+        ]);
+        const linesByRecipe: Record<string, EscandalloLine[]> = {};
+        const linesList = await Promise.all(recipes.map((r) => fetchEscandalloLines(supabase, localId, r.id)));
+        recipes.forEach((r, i) => {
+          linesByRecipe[r.id] = linesList[i];
+        });
+        return {
+          recipesById: new Map(recipes.map((x) => [x.id, x])),
+          rawProductById: new Map(rawProducts.map((x) => [x.id, x])),
+          processedById: new Map(processed.map((x) => [x.id, x])),
+          linesByRecipe,
+        };
+      };
+
+      const toSnapshotEntry = (
+        line: EscandalloLine,
+        unitCost: number,
+        lineCost: number,
+      ): NonNullable<MermaRecord['compositionSnapshot']>[number] | null => {
+        const qty = Number(line.qty);
+        if (!Number.isFinite(qty) || qty <= 0 || !line.unit || !Number.isFinite(unitCost) || unitCost <= 0) return null;
+        if (line.sourceType === 'raw') {
+          const componentId = line.articleId ?? line.rawSupplierProductId ?? '';
+          if (!componentId) return null;
+          return {
+            componentType: 'master',
+            componentId,
+            componentKind: null,
+            qty,
+            unit: line.unit,
+            unitCost: Math.round(unitCost * 10000) / 10000,
+            lineCost: Math.round(lineCost * 10000) / 10000,
+          };
+        }
+        if (line.sourceType === 'processed') {
+          const componentId = line.processedProductId ?? '';
+          if (!componentId) return null;
+          return {
+            componentType: 'base_subreceta',
+            componentId,
+            componentKind: 'processed',
+            qty,
+            unit: line.unit,
+            unitCost: Math.round(unitCost * 10000) / 10000,
+            lineCost: Math.round(lineCost * 10000) / 10000,
+          };
+        }
+        if (line.sourceType === 'subrecipe') {
+          const componentId = line.subRecipeId ?? '';
+          if (!componentId) return null;
+          return {
+            componentType: 'base_subreceta',
+            componentId,
+            componentKind: 'recipe',
+            qty,
+            unit: line.unit,
+            unitCost: Math.round(unitCost * 10000) / 10000,
+            lineCost: Math.round(lineCost * 10000) / 10000,
+          };
+        }
+        return null;
+      };
+
+      const resolveRecipeSnapshot = async (
+        recipeId: string,
+        originUsed: Extract<NonNullable<MermaRecord['originTypeUsed']>, 'escandallo' | 'base_subreceta'>,
+      ) => {
+        const graph = await loadEscandalloPricingGraph();
+        const recipe = graph.recipesById.get(recipeId);
+        if (!recipe) return null;
+        const lines = graph.linesByRecipe[recipe.id] ?? [];
+        const context = { linesByRecipe: graph.linesByRecipe, recipesById: graph.recipesById, recipeId: recipe.id };
+        let total = 0;
+        const snapshot: NonNullable<MermaRecord['compositionSnapshot']> = [];
+        for (const line of lines) {
+          const resolvedLine = resolveEscandalloLineCost({
+            line,
+            rawProductById: graph.rawProductById,
+            processedById: graph.processedById,
+            context,
+          });
+          total += resolvedLine.totalCost;
+          const snapshotEntry = toSnapshotEntry(line, resolvedLine.unitCost, resolvedLine.totalCost);
+          if (snapshotEntry) snapshot.push(snapshotEntry);
+        }
+        const perUnit =
+          total > 0 ? Math.round((total / effectiveRecipeYieldQtyForCost(recipe)) * 10000) / 10000 : 0;
+        if (perUnit <= 0) return null;
+        return {
+          unitCost: perUnit,
+          originUsed,
+          compositionSnapshot: snapshot.length > 0 ? snapshot : undefined,
+        };
+      };
+
       if (origin === 'master' && product.masterArticleId) {
         try {
           const hints = await fetchPurchaseArticleCostHintsByIds(supabase, localId, [product.masterArticleId]);
@@ -947,27 +1054,8 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
 
       if (origin === 'escandallo' && product.escandalloId) {
         try {
-          const [recipes, rawProducts, processed] = await Promise.all([
-            fetchEscandalloRecipes(supabase, localId),
-            fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
-            fetchProcessedProductsForEscandallo(supabase, localId),
-          ]);
-          const recipe = recipes.find((r) => r.id === product.escandalloId);
-          if (recipe) {
-            const linesByRecipe: Record<string, EscandalloLine[]> = {};
-            const linesList = await Promise.all(recipes.map((r) => fetchEscandalloLines(supabase, localId, r.id)));
-            recipes.forEach((r, i) => {
-              linesByRecipe[r.id] = linesList[i];
-            });
-            const total = recalculateRecipeCost({
-              lines: linesByRecipe[recipe.id] ?? [],
-              rawProductById: new Map(rawProducts.map((x) => [x.id, x])),
-              processedById: new Map(processed.map((x) => [x.id, x])),
-              context: { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
-            });
-            const perUnit = total > 0 ? Math.round((total / effectiveRecipeYieldQtyForCost(recipe)) * 10000) / 10000 : 0;
-            if (perUnit > 0) return { unitCost: perUnit, originUsed: 'escandallo' };
-          }
+          const resolved = await resolveRecipeSnapshot(product.escandalloId, 'escandallo');
+          if (resolved) return resolved;
         } catch {
           /* fallback manual */
         }
@@ -975,39 +1063,37 @@ export function MermasStoreProvider({ children }: { children: React.ReactNode })
 
       if (origin === 'base_subreceta' && product.baseSubrecipeId) {
         try {
-          const [recipes, rawProducts, processed] = await Promise.all([
-            fetchEscandalloRecipes(supabase, localId),
-            fetchEscandalloRawProductsWithWeightedPurchasePrices(supabase, localId),
-            fetchProcessedProductsForEscandallo(supabase, localId),
-          ]);
           if (product.baseSubrecipeKind === 'processed') {
-            const p = processed.find((x) => x.id === product.baseSubrecipeId);
+            const graph = await loadEscandalloPricingGraph();
+            const p = graph.processedById.get(product.baseSubrecipeId);
             if (p) {
-              const raw = rawProducts.find((x) => x.id === p.sourceSupplierProductId);
+              const raw = graph.rawProductById.get(p.sourceSupplierProductId);
               if (raw && p.outputQty > 0) {
                 const linePrice =
                   ((raw.pricePerUnit > 0 ? raw.pricePerUnit : 0) * p.inputQty + p.extraCostEur) / p.outputQty;
                 const per = Math.round(linePrice * 10000) / 10000;
-                if (per > 0) return { unitCost: per, originUsed: 'base_subreceta' };
+                if (per > 0) {
+                  return {
+                    unitCost: per,
+                    originUsed: 'base_subreceta',
+                    compositionSnapshot: [
+                      {
+                        componentType: 'base_subreceta',
+                        componentId: p.id,
+                        componentKind: 'processed',
+                        qty: 1,
+                        unit: p.outputUnit,
+                        unitCost: per,
+                        lineCost: per,
+                      },
+                    ],
+                  };
+                }
               }
             }
           } else {
-            const recipe = recipes.find((r) => r.id === product.baseSubrecipeId);
-            if (recipe) {
-              const linesByRecipe: Record<string, EscandalloLine[]> = {};
-              const linesList = await Promise.all(recipes.map((r) => fetchEscandalloLines(supabase, localId, r.id)));
-              recipes.forEach((r, i) => {
-                linesByRecipe[r.id] = linesList[i];
-              });
-              const total = recalculateRecipeCost({
-                lines: linesByRecipe[recipe.id] ?? [],
-                rawProductById: new Map(rawProducts.map((x) => [x.id, x])),
-                processedById: new Map(processed.map((x) => [x.id, x])),
-                context: { linesByRecipe, recipesById: new Map(recipes.map((x) => [x.id, x])), recipeId: recipe.id },
-              });
-              const per = total > 0 ? Math.round((total / effectiveRecipeYieldQtyForCost(recipe)) * 10000) / 10000 : 0;
-              if (per > 0) return { unitCost: per, originUsed: 'base_subreceta' };
-            }
+            const resolved = await resolveRecipeSnapshot(product.baseSubrecipeId, 'base_subreceta');
+            if (resolved) return resolved;
           }
         } catch {
           /* fallback manual */
