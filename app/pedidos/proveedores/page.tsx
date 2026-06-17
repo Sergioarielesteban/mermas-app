@@ -181,6 +181,15 @@ function parsePricePerBilling(raw: string) {
   return Math.round(value * 10000) / 10000;
 }
 
+/** IVA admitido como 0,10 / 0,21 o también 10 / 21. Devuelve fracción 0..1. */
+function parseVatRateInput(raw: string): number | null {
+  const value = parsePriceInput(raw);
+  if (value == null || value <= 0) return null;
+  const normalized = value > 1 ? value / 100 : value;
+  if (!Number.isFinite(normalized) || normalized <= 0 || normalized > 1) return null;
+  return Math.round(normalized * 10000) / 10000;
+}
+
 /** Kg estimado por bandeja/caja (3 decimales). Vacío = sin estimación. */
 function parseKgEstimate(raw: string) {
   const t = String(raw).trim();
@@ -359,7 +368,7 @@ const EMPTY_PRODUCT_DRAFT: ProductDraft = {
   name: '',
   unit: 'ud',
   price: '',
-  vatRate: '0',
+  vatRate: '0,21',
   estimatedKg: '',
   unitsPerPack: '1',
   recipeUnit: 'ud',
@@ -726,9 +735,9 @@ export default function ProveedoresPage() {
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
     if (!productSupplierId) return setMessage('Selecciona proveedor.');
     const name = normalizeUpper(productName);
-    const vatRate = parsePriceInput(productVat);
+    const vatRate = parseVatRateInput(productVat);
     if (!name) return showProductFormBanner('FALTA NOMBRE');
-    if (vatRate == null || vatRate <= 0 || vatRate > 1) return showProductFormBanner('FALTA IVA');
+    if (vatRate == null) return showProductFormBanner('FALTA IVA');
     const pack = parseUnitsPerPack(productUnitsPerPack);
     if (pack == null) return showProductFormBanner('FALTAN UNIDADES POR ENVASE');
     const supabase = getSupabaseClient();
@@ -937,11 +946,11 @@ export default function ProveedoresPage() {
     const draft = productDrafts[productId];
     const name = draft?.name?.trim() ?? '';
     const priceRaw = parsePriceInput(draft?.price ?? '');
-    const vatRate = parsePriceInput(draft?.vatRate ?? '');
+    const vatRate = parseVatRateInput(draft?.vatRate ?? '');
     if (!name) {
       return showProductFormBanner('FALTA NOMBRE');
     }
-    if (vatRate == null || vatRate <= 0 || vatRate > 1) {
+    if (vatRate == null) {
       return showProductFormBanner('FALTA IVA');
     }
     const pack = parseUnitsPerPack(draft.unitsPerPack ?? '1');
@@ -1506,7 +1515,7 @@ export default function ProveedoresPage() {
             <SoftField
               value={productVat}
               onChange={(e) => setProductVat(e.target.value)}
-              placeholder="IVA (0,21)"
+              placeholder="IVA (10 o 0,10)"
             />
           </div>
           {unitSupportsReceivedWeightKg(productUnit) && productUnit !== 'kg' ? (
@@ -2110,7 +2119,7 @@ export default function ProveedoresPage() {
                               name: '',
                               unit: 'ud',
                               price: '',
-                              vatRate: '0',
+                              vatRate: '0,21',
                               estimatedKg: '',
                               unitsPerPack: '1',
                               recipeUnit: 'ud' as Unit,
@@ -2176,7 +2185,7 @@ export default function ProveedoresPage() {
                                 name: '',
                                 unit: 'ud',
                                 price: '',
-                                vatRate: '0',
+                                vatRate: '0,21',
                                 estimatedKg: '',
                                 unitsPerPack: '1',
                                 recipeUnit: 'ud' as Unit,
@@ -2186,7 +2195,7 @@ export default function ProveedoresPage() {
                             },
                           }))
                         }
-                        placeholder="IVA (0,21)"
+                        placeholder="IVA (10 o 0,10)"
                       />
                     </div>
                     {unitSupportsReceivedWeightKg(u) && u !== 'kg' ? (
@@ -2461,7 +2470,7 @@ export default function ProveedoresPage() {
                                 name: '',
                                 unit: 'ud',
                                 price: '',
-                                vatRate: '0',
+                                vatRate: '0,21',
                                 estimatedKg: '',
                                 unitsPerPack: '1',
                                 recipeUnit: 'ud' as Unit,
@@ -2485,7 +2494,7 @@ export default function ProveedoresPage() {
                                   name: '',
                                   unit: 'ud',
                                   price: '',
-                                  vatRate: '0',
+                                  vatRate: '0,21',
                                   estimatedKg: '',
                                   unitsPerPack: '1',
                                   recipeUnit: 'ud' as Unit,
