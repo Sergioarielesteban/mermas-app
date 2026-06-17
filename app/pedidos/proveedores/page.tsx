@@ -387,7 +387,12 @@ export default function ProveedoresPage() {
   const [suppliers, setSuppliers] = React.useState<PedidoSupplier[]>([]);
   const [message, setMessage] = React.useState<string | null>(null);
   const [showDeletedBanner, setShowDeletedBanner] = React.useState(false);
+  const [showAddedProductBanner, setShowAddedProductBanner] = React.useState(false);
+  const [isSavingSupplierProduct, setIsSavingSupplierProduct] = React.useState(false);
+  const [productFormBanner, setProductFormBanner] = React.useState<string | null>(null);
   const deletedBannerTimeoutRef = React.useRef<number | null>(null);
+  const addedProductBannerTimeoutRef = React.useRef<number | null>(null);
+  const savingSupplierProductRef = React.useRef(false);
   const [newSupplierOpen, setNewSupplierOpen] = React.useState(false);
   const [newSupplierName, setNewSupplierName] = React.useState('');
   const [newSupplierContact, setNewSupplierContact] = React.useState('');
@@ -675,9 +680,27 @@ export default function ProveedoresPage() {
     return Math.round(eq * ppk * 100) / 100;
   }, [productDualKgBilling, productUnit, productEquivKg, productPricePerKg]);
 
+  const resetNewSupplierProductForm = React.useCallback(() => {
+    setProductName('');
+    setProductPrice('');
+    setProductEstimatedKg('');
+    setProductVat('0,21');
+    setProductUnitsPerPack('1');
+    setProductRecipeUnit('ud');
+    setProductParWeekly('');
+    setProductDualKgBilling(false);
+    setProductEquivKg('');
+    setProductPricePerKg('');
+  }, []);
+
+  const showProductFormBanner = React.useCallback((text: string) => {
+    setProductFormBanner(text);
+  }, []);
+
   React.useEffect(
     () => () => {
       if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
+      if (addedProductBannerTimeoutRef.current) window.clearTimeout(addedProductBannerTimeoutRef.current);
     },
     [],
   );
@@ -698,15 +721,16 @@ export default function ProveedoresPage() {
       .catch((err: Error) => setMessage(err.message));
   };
 
-  const saveSupplierProduct = () => {
+  const saveSupplierProduct = async () => {
+    if (savingSupplierProductRef.current) return;
     if (!localId) return setMessage('Perfil del local no cargado. Cierra sesión y vuelve a entrar.');
     if (!productSupplierId) return setMessage('Selecciona proveedor.');
     const name = normalizeUpper(productName);
     const vatRate = parsePriceInput(productVat);
-    if (!name) return setMessage('Nombre de producto obligatorio.');
-    if (vatRate == null || vatRate < 0 || vatRate > 1) return setMessage('IVA inválido. Usa 0,21 o 0,10.');
+    if (!name) return showProductFormBanner('FALTA NOMBRE');
+    if (vatRate == null || vatRate <= 0 || vatRate > 1) return showProductFormBanner('FALTA IVA');
     const pack = parseUnitsPerPack(productUnitsPerPack);
-    if (pack == null) return setMessage('«Piezas por envase» debe ser un número mayor que 0 (ej. 40).');
+    if (pack == null) return showProductFormBanner('FALTAN UNIDADES POR ENVASE');
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
     const dualOk =
@@ -720,54 +744,58 @@ export default function ProveedoresPage() {
     if (dualOk) {
       const eq = parseKgEstimate(productEquivKg);
       const ppk = parsePricePerBilling(productPricePerKg);
-      if (eq === undefined) return setMessage('Indica kg por unidad de pedido (equivalencia) o desactiva «cobro por kg».');
-      if (eq === null) return setMessage('Indica kg por unidad de pedido (equivalencia) o desactiva «cobro por kg».');
-      if (ppk == null) return setMessage('Indica €/kg habitual o desactiva «cobro por kg».');
+      if (eq === undefined || eq === null) return showProductFormBanner('FALTA EQUIVALENCIA KG');
+      if (ppk == null) return showProductFormBanner('FALTA PRECIO KG');
       billingUnit = 'kg';
       billingQtyPerOrderUnit = eq;
       pricePerBillingUnit = ppk;
       pricePerUnit = Math.round(eq * ppk * 100) / 100;
     } else {
       if (!Number.isFinite(pricePerUnit) || pricePerUnit <= 0) {
-        return setMessage('Producto y precio válidos son obligatorios.');
+        return showProductFormBanner('FALTA PRECIO');
       }
       if (unitSupportsReceivedWeightKg(productUnit)) {
         const parsedKg = parseKgEstimate(productEstimatedKg);
-        if (parsedKg === undefined) return setMessage('Kg estimado por envase inválido (usa un número > 0 o déjalo vacío).');
+        if (parsedKg === undefined) return showProductFormBanner('KG POR ENVASE INVALIDO');
         estimatedKgPerUnit = parsedKg;
       }
     }
     const parW = parseParWeekly(productParWeekly);
-    void createSupplierProduct(supabase, localId, productSupplierId, {
-      name,
-      unit: productUnit,
-      pricePerUnit,
-      vatRate,
-      parStock: parW,
-      estimatedKgPerUnit,
-      unitsPerPack: pack,
-      recipeUnit: pack > 1 ? productRecipeUnit : null,
-      billingUnit,
-      billingQtyPerOrderUnit,
-      pricePerBillingUnit,
-    })
-      .then(() => {
-        setProductName('');
-        setProductPrice('');
-        setProductEstimatedKg('');
-        setProductVat('0,21');
-        setProductUnitsPerPack('1');
-        setProductRecipeUnit('ud');
-        setProductParWeekly('');
-        setProductDualKgBilling(false);
-        setProductEquivKg('');
-        setProductPricePerKg('');
-        setAddProductOpen(false);
-        setMessage('Producto de proveedor guardado.');
-        reload();
-        dispatchPedidosDataChanged();
-      })
-      .catch((err: Error) => setMessage(err.message));
+    savingSupplierProductRef.current = true;
+    setIsSavingSupplierProduct(true);
+    setProductFormBanner(null);
+    setMessage(null);
+    try {
+      await createSupplierProduct(supabase, localId, productSupplierId, {
+        name,
+        unit: productUnit,
+        pricePerUnit,
+        vatRate,
+        parStock: parW,
+        estimatedKgPerUnit,
+        unitsPerPack: pack,
+        recipeUnit: pack > 1 ? productRecipeUnit : null,
+        billingUnit,
+        billingQtyPerOrderUnit,
+        pricePerBillingUnit,
+      });
+      resetNewSupplierProductForm();
+      setExpandedSupplierId(productSupplierId);
+      setAddProductOpen(false);
+      setShowAddedProductBanner(true);
+      if (addedProductBannerTimeoutRef.current) window.clearTimeout(addedProductBannerTimeoutRef.current);
+      addedProductBannerTimeoutRef.current = window.setTimeout(() => {
+        setShowAddedProductBanner(false);
+        addedProductBannerTimeoutRef.current = null;
+      }, 1000);
+      reload();
+      dispatchPedidosDataChanged();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'No se pudo guardar el producto.');
+    } finally {
+      savingSupplierProductRef.current = false;
+      setIsSavingSupplierProduct(false);
+    }
   };
 
 
@@ -911,17 +939,17 @@ export default function ProveedoresPage() {
     const priceRaw = parsePriceInput(draft?.price ?? '');
     const vatRate = parsePriceInput(draft?.vatRate ?? '');
     if (!name) {
-      return setMessage('El nombre del producto es obligatorio.');
+      return showProductFormBanner('FALTA NOMBRE');
     }
-    if (vatRate == null || vatRate < 0 || vatRate > 1) {
-      return setMessage('IVA inválido. Usa 0,21 o 0,10.');
+    if (vatRate == null || vatRate <= 0 || vatRate > 1) {
+      return showProductFormBanner('FALTA IVA');
     }
     const pack = parseUnitsPerPack(draft.unitsPerPack ?? '1');
-    if (pack == null) return setMessage('«Piezas por envase» debe ser un número mayor que 0.');
+    if (pack == null) return showProductFormBanner('FALTAN UNIDADES POR ENVASE');
     const dualOk =
       draft.dualKgBilling === true && unitSupportsReceivedWeightKg(draft.unit) && draft.unit !== 'kg';
     if (!dualOk && (priceRaw == null || priceRaw <= 0)) {
-      return setMessage('Producto, unidad y precio válido son obligatorios.');
+      return showProductFormBanner('FALTA PRECIO');
     }
     let pricePerUnit = priceRaw ?? NaN;
     let estimatedKgPerUnit: number | null = null;
@@ -931,9 +959,8 @@ export default function ProveedoresPage() {
     if (dualOk) {
       const eq = parseKgEstimate(draft.equivKg ?? '');
       const ppk = parsePricePerBilling(draft.pricePerKg ?? '');
-      if (eq === undefined) return setMessage('Equiv. kg por unidad de pedido inválida o desactiva «cobro por kg».');
-      if (eq === null) return setMessage('Equiv. kg por unidad de pedido obligatoria o desactiva «cobro por kg».');
-      if (ppk == null) return setMessage('€/kg habitual inválido o desactiva «cobro por kg».');
+      if (eq === undefined || eq === null) return showProductFormBanner('FALTA EQUIVALENCIA KG');
+      if (ppk == null) return showProductFormBanner('FALTA PRECIO KG');
       billingUnit = 'kg';
       billingQtyPerOrderUnit = eq;
       pricePerBillingUnit = ppk;
@@ -941,7 +968,7 @@ export default function ProveedoresPage() {
     } else {
       if (unitSupportsReceivedWeightKg(draft.unit)) {
         const parsedKg = parseKgEstimate(draft.estimatedKg ?? '');
-        if (parsedKg === undefined) return setMessage('Kg estimado por envase inválido (usa un número > 0 o déjalo vacío).');
+        if (parsedKg === undefined) return showProductFormBanner('KG POR ENVASE INVALIDO');
         estimatedKgPerUnit = parsedKg;
       }
     }
@@ -954,7 +981,7 @@ export default function ProveedoresPage() {
     for (const seg of segmentsSource) {
       const qtyRaw = parsePriceInput(seg.targetQuantity ?? '');
       if (qtyRaw == null) continue;
-      if (qtyRaw < 0) return setMessage('Plan de consumo: la cantidad objetivo no puede ser negativa.');
+      if (qtyRaw < 0) return showProductFormBanner('PLAN DE CONSUMO INVALIDO');
       const covers = [...new Set(seg.coversDays ?? [])].filter((d): d is PedidoConsumptionWeekday =>
         CONSUMPTION_WEEKDAYS.some((x) => x.value === d),
       );
@@ -969,6 +996,7 @@ export default function ProveedoresPage() {
       weekly_reference: Math.max(0, Math.round(parW * 100) / 100),
       segments: mode === 'advanced' ? segments : [],
     };
+    setProductFormBanner(null);
     void updateSupplierProduct(supabase, localId, productId, {
       name: normalizeUpper(name),
       unit: draft.unit,
@@ -1081,6 +1109,7 @@ export default function ProveedoresPage() {
 
   const openAddProductForSupplier = (supplierId: string) => {
     setMessage(null);
+    setProductFormBanner(null);
     setProductSupplierId(supplierId);
     setAddProductOpen(true);
   };
@@ -1103,6 +1132,13 @@ export default function ProveedoresPage() {
         <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
           <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
             <p className="text-xl font-black uppercase tracking-wide text-white">ELIMINADO</p>
+          </div>
+        </div>
+      ) : null}
+      {showAddedProductBanner ? (
+        <div className="pointer-events-none fixed inset-0 z-[90] grid place-items-center bg-black/25 px-6">
+          <div className="rounded-2xl bg-[#D32F2F] px-7 py-5 text-center shadow-2xl ring-2 ring-white/75">
+            <p className="text-xl font-black uppercase tracking-wide text-white">ARTICULO AGREGADO</p>
           </div>
         </div>
       ) : null}
@@ -1251,9 +1287,11 @@ export default function ProveedoresPage() {
                             type="button"
                             onClick={() => {
                               if (editingProductId === p.id) {
+                                setProductFormBanner(null);
                                 setEditingProductId(null);
                                 return;
                               }
+                              setProductFormBanner(null);
                               setProductDrafts((prev) => ({
                                 ...prev,
                                 [p.id]: {
@@ -1413,9 +1451,18 @@ export default function ProveedoresPage() {
       <ProveedoresModalShell
         open={addProductOpen}
         title="Añadir producto"
-        onClose={() => setAddProductOpen(false)}
+        onClose={() => {
+          setProductFormBanner(null);
+          setAddProductOpen(false);
+        }}
+        allowClose={!isSavingSupplierProduct}
       >
         <div className="mt-1 grid grid-cols-1 gap-2.5">
+          {productFormBanner ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-[12px] font-black uppercase tracking-[0.12em] text-rose-700">
+              {productFormBanner}
+            </div>
+          ) : null}
           <p className="rounded-2xl border border-zinc-200/70 bg-zinc-50/80 px-3 py-2.5 text-sm font-medium text-zinc-900">
             {suppliers.find((s) => s.id === productSupplierId)?.name ?? 'Proveedor'}
           </p>
@@ -1533,9 +1580,10 @@ export default function ProveedoresPage() {
           <button
             type="button"
             onClick={saveSupplierProduct}
-            className="h-10 rounded-2xl bg-[#D32F2F] px-3 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(211,47,47,0.12)]"
+            disabled={isSavingSupplierProduct}
+            className="h-10 rounded-2xl bg-[#D32F2F] px-3 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(211,47,47,0.12)] disabled:cursor-wait disabled:opacity-70"
           >
-            Guardar producto
+            {isSavingSupplierProduct ? 'Guardando…' : 'Guardar producto'}
           </button>
         </div>
 
@@ -2041,9 +2089,17 @@ export default function ProveedoresPage() {
               <ProveedoresModalShell
                 open
                 title="Editar producto"
-                onClose={() => setEditingProductId(null)}
+                onClose={() => {
+                  setProductFormBanner(null);
+                  setEditingProductId(null);
+                }}
               >
                   <div className="grid grid-cols-1 gap-2 rounded-[18px] border border-zinc-200/70 bg-white/75 p-2.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)] ring-1 ring-zinc-100/70">
+                    {productFormBanner ? (
+                      <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-center text-[12px] font-black uppercase tracking-[0.12em] text-rose-700">
+                        {productFormBanner}
+                      </div>
+                    ) : null}
                     <SoftField
                       value={productDrafts[editP.id]?.name ?? ''}
                       onChange={(e) =>
