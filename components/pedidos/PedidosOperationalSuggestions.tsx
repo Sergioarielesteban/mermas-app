@@ -170,53 +170,61 @@ export default React.memo(function PedidosOperationalSuggestions({
     markInteraction();
   }, [markInteraction]);
 
-  if (suggestions.length === 0) return null;
-
   return (
     <div
-      className="border-b border-zinc-100/80 bg-gradient-to-b from-[#FFF9F9]/50 to-transparent px-0 py-0.5"
-      aria-live="polite"
+      className={[
+        'min-h-[96px] border-b border-zinc-100/80 px-0 py-0.5 transition-opacity duration-150',
+        suggestions.length > 0
+          ? 'bg-gradient-to-b from-[#FFF9F9]/50 to-transparent opacity-100'
+          : 'bg-white opacity-0',
+      ].join(' ')}
+      aria-hidden={suggestions.length === 0}
+      aria-live={suggestions.length > 0 ? 'polite' : undefined}
     >
       <div className="px-2.5 pb-0 sm:px-3">
         <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-400">Recordatorios</p>
       </div>
 
       <div className="px-2.5 sm:px-3">
-        <ul
-          ref={scrollerRef}
-          onScroll={onScrollerScroll}
-          onPointerDown={onScrollerPointerDown}
-          onTouchStart={onScrollerPointerDown}
-          className={[
-            'flex w-full gap-0 overflow-x-auto overscroll-x-contain px-0 pb-0',
-            'snap-x snap-mandatory',
-            '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
-            'touch-pan-x',
-          ].join(' ')}
-          style={{
-            WebkitOverflowScrolling: 'touch',
-          }}
-        >
-          {suggestions.map((s) => (
-            <li
-              key={s.id}
-              className="w-full min-w-full shrink-0 snap-start snap-always"
-              style={{
-                flex: '0 0 100%',
-                scrollSnapAlign: 'start',
-                scrollSnapStop: 'always',
-              }}
-            >
-              <PedidosOperationalSuggestionCard
-                suggestion={s}
-                onDismiss={() => {
-                  markInteraction();
-                  onDismiss(s.id);
+        {suggestions.length > 0 ? (
+          <ul
+            ref={scrollerRef}
+            onScroll={onScrollerScroll}
+            onPointerDown={onScrollerPointerDown}
+            onTouchStart={onScrollerPointerDown}
+            className={[
+              'flex w-full gap-0 overflow-x-auto overscroll-x-contain px-0 pb-0',
+              'snap-x snap-mandatory',
+              '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+              'touch-pan-x',
+            ].join(' ')}
+            style={{
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            {suggestions.map((s) => (
+              <li
+                key={s.id}
+                className="w-full min-w-full shrink-0 snap-start snap-always"
+                style={{
+                  flex: '0 0 100%',
+                  scrollSnapAlign: 'start',
+                  scrollSnapStop: 'always',
                 }}
-              />
-            </li>
-          ))}
-        </ul>
+              >
+                <PedidosOperationalSuggestionCard
+                  suggestion={s}
+                  onDismiss={() => {
+                    markInteraction();
+                    onDismiss(s.id);
+                  }}
+                />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div style={{ height: SUGGESTION_CARD_HEIGHT_PX }} />
+        )}
       </div>
 
       {suggestions.length > 1 ? (

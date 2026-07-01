@@ -161,6 +161,14 @@ function PedidosNuevoCatalogLineInner({
     hold.onHoldPointerEnd();
   }, [clearHoldRed, clearLongPressTimers, hold, onDelta]);
 
+  const focusStepperControl = React.useCallback((el: HTMLButtonElement) => {
+    try {
+      el.focus({ preventScroll: true });
+    } catch {
+      el.focus();
+    }
+  }, []);
+
   const scheduleHoldRed = React.useCallback(() => {
     clearHoldRed();
     holdRedTimerRef.current = window.setTimeout(() => {
@@ -366,9 +374,15 @@ function PedidosNuevoCatalogLineInner({
                 <span className="font-semibold tabular-nums text-[#E30613]">{priceLine}</span>
               )}
             </p>
-            {extraHintParts.length > 0 ? (
-              <p className="mt-px truncate text-[10px] leading-tight text-zinc-500">{extraHintParts.join(' · ')}</p>
-            ) : null}
+            <p
+              className={[
+                'mt-px h-[13px] truncate text-[10px] leading-tight text-zinc-500 transition-opacity duration-150',
+                extraHintParts.length > 0 ? 'opacity-100' : 'opacity-0',
+              ].join(' ')}
+              aria-hidden={extraHintParts.length === 0}
+            >
+              {extraHintParts.length > 0 ? extraHintParts.join(' · ') : '\u00a0'}
+            </p>
           </div>
 
           <div className="flex shrink-0 items-center self-start pt-0.5">
@@ -387,6 +401,7 @@ function PedidosNuevoCatalogLineInner({
                   tabIndex={-1}
                   onPointerDown={(e) => {
                     if (minusDisabled) return;
+                    focusStepperControl(e.currentTarget);
                     gestureRef.current = {
                       active: true,
                       sign: -1,
@@ -485,6 +500,7 @@ function PedidosNuevoCatalogLineInner({
                   type="button"
                   tabIndex={-1}
                   onPointerDown={(e) => {
+                    focusStepperControl(e.currentTarget);
                     gestureRef.current = {
                       active: true,
                       sign: 1,
