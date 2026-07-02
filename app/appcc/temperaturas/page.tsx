@@ -235,6 +235,7 @@ function SlotEditor({
   registrador: string;
 }) {
   const { localId, userId: authUserId } = useAuth();
+  const editorRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState('');
   const [notes, setNotes] = useState('');
@@ -242,14 +243,6 @@ function SlotEditor({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [savedMeta, setSavedMeta] = useState<{ name: string; time: string } | null>(null);
-
-  useEffect(() => {
-    setOpen(false);
-    setValue('');
-    setNotes('');
-    setErr(null);
-    setSavedMeta(null);
-  }, [reading?.id, dateKey]);
 
   const tempParsed = parseTempInput(value, unit.unit_type);
   const hasLimits = unit.temp_min_c != null || unit.temp_max_c != null;
@@ -317,6 +310,25 @@ function SlotEditor({
   };
 
   const slotLabel = SLOT_DISPLAY[slot];
+  const revealEditor = useCallback(() => {
+    for (const delay of [140, 420]) {
+      window.setTimeout(() => {
+        editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, delay);
+    }
+  }, []);
+  const openEditor = useCallback((nextValue = '') => {
+    setValue(nextValue);
+    setOpen(true);
+    setErr(null);
+    revealEditor();
+  }, [revealEditor]);
+
+  const handleInputFocus = useCallback(() => {
+    window.setTimeout(() => {
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 220);
+  }, []);
 
   // ── Caso: ya hay lectura ──────────────────────────────────────────────────
   if (reading && !open) {
@@ -362,9 +374,8 @@ function SlotEditor({
           <button
             type="button"
             onClick={() => {
-              setValue(sanitizeTempInput(String(Math.abs(reading.temperature_c))));
               setNotes(parseRealNotesFromNotes(reading.notes));
-              setOpen(true);
+              openEditor(sanitizeTempInput(String(Math.abs(reading.temperature_c))));
             }}
             disabled={disabled}
             className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-white/70 hover:text-zinc-600 disabled:opacity-30"
@@ -384,7 +395,7 @@ function SlotEditor({
         <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">{slotLabel}</span>
         <button
           type="button"
-          onClick={() => { setOpen(true); setValue(''); setErr(null); }}
+          onClick={() => openEditor('')}
           disabled={disabled}
           className="flex h-11 items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-zinc-200 bg-white text-[13px] font-bold text-zinc-400 transition hover:border-[#D32F2F]/60 hover:text-[#D32F2F] disabled:opacity-30"
         >
@@ -397,7 +408,7 @@ function SlotEditor({
 
   // ── Modo edición ──────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col gap-1">
+    <div ref={editorRef} className="flex scroll-mt-24 flex-col gap-1 scroll-mb-[14rem]">
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">{slotLabel}</span>
         <button
@@ -425,6 +436,7 @@ function SlotEditor({
               inputMode="decimal"
               value={value}
               onChange={(e) => setValue(sanitizeTempInput(e.target.value))}
+              onFocus={handleInputFocus}
               onKeyDown={(e) => {
                 if (e.key === '-' || e.key === '+' || e.key.toLowerCase() === 'e') e.preventDefault();
                 if (e.key === 'Enter') void save();
@@ -434,11 +446,6 @@ function SlotEditor({
               className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-2 text-center text-lg font-black tabular-nums text-zinc-900 outline-none focus:border-[#D32F2F]/60 focus:ring-1 focus:ring-[#D32F2F]/25"
               autoFocus
             />
-            {tempParsed !== null && (
-              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-zinc-400">
-                {unit.unit_type === 'congelador' ? '-' : ''}{Math.abs(tempParsed)}°C
-              </span>
-            )}
           </div>
           <button
             type="button"
@@ -579,7 +586,7 @@ function UnitCard({
       <div className="grid grid-cols-2 gap-3 border-t border-zinc-100 px-4 py-3">
         {TEMP_REGISTRO_SLOTS.map((slot) => (
           <SlotEditor
-            key={slot}
+            key={`${unit.id}:${slot}:${dateKey}:${slot === 'manana' ? rM?.id ?? 'empty' : rN?.id ?? 'empty'}`}
             unit={unit}
             slot={slot}
             dateKey={dateKey}
@@ -600,9 +607,13 @@ function UnitCard({
 function AppccTemperaturasInner() {
   const searchParams = useSearchParams();
   const { localId, profileReady, localName, localCode } = useAuth();
-  const [dateKey, setDateKey] = useState(() => appccTemperaturasOperationalDateKey());
-  const [pdfDateFrom, setPdfDateFrom] = useState(() => appccTemperaturasOperationalDateKey());
-  const [pdfDateTo, setPdfDateTo] = useState(() => appccTemperaturasOperationalDateKey());
+  const initialDateKey = useMemo(() => {
+    const d = searchParams.get('d');
+    return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : appccTemperaturasOperationalDateKey();
+  }, [searchParams]);
+  const [dateKey, setDateKey] = useState(() => initialDateKey);
+  const [pdfDateFrom, setPdfDateFrom] = useState(() => initialDateKey);
+  const [pdfDateTo, setPdfDateTo] = useState(() => initialDateKey);
   const [units, setUnits] = useState<AppccColdUnitRow[]>([]);
   const [readings, setReadings] = useState<AppccReadingRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -610,24 +621,7 @@ function AppccTemperaturasInner() {
   const [pdfBusy, setPdfBusy] = useState(false);
   const [activeZone, setActiveZone] = useState<AppccZone>('cocina');
   const [showPdfPanel, setShowPdfPanel] = useState(false);
-
-  // Nombre del registrador: independiente por sector y por día
-  const currentRegKey = regKey(dateKey, activeZone);
-  const [registrador, setRegistrador] = useState<string>('');
-
-  // Recarga el nombre cuando cambia el sector o el día
-  useEffect(() => {
-    setRegistrador(loadRegistradorForKey(currentRegKey));
-  }, [currentRegKey]);
-
-  useEffect(() => {
-    const d = searchParams.get('d');
-    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
-      setDateKey(d);
-      setPdfDateFrom(d);
-      setPdfDateTo(d);
-    }
-  }, [searchParams]);
+  const [registradorByKey, setRegistradorByKey] = useState<Record<string, string>>({});
 
   const supabaseOk = isSupabaseEnabled() && getSupabaseClient();
 
@@ -683,9 +677,15 @@ function AppccTemperaturasInner() {
   }, []);
 
   const loadRef = useRef(load);
-  loadRef.current = load;
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(id);
+  }, [load]);
 
   useEffect(() => {
     const ping = () => {
@@ -741,7 +741,6 @@ function AppccTemperaturasInner() {
     return result;
   }, [byZone, bySlot]);
 
-  const disabled = !localId || !profileReady || !supabaseOk || loading || !registrador;
   const localLabel = localName ?? localCode ?? '—';
 
   const handleDownloadPdf = async () => {
@@ -770,16 +769,18 @@ function AppccTemperaturasInner() {
     }
   };
 
-  // Ensure active zone is valid
-  useEffect(() => {
-    if (activeZones.length > 0 && !activeZones.find((z) => z.zone === activeZone)) {
-      setActiveZone(activeZones[0].zone);
-    }
-  }, [activeZones, activeZone]);
+  const effectiveActiveZone =
+    activeZones.length > 0 && !activeZones.find((z) => z.zone === activeZone)
+      ? activeZones[0].zone
+      : activeZone;
+  // Nombre del registrador: independiente por sector y por día
+  const currentRegKey = regKey(dateKey, effectiveActiveZone);
+  const registrador = registradorByKey[currentRegKey] ?? loadRegistradorForKey(currentRegKey);
+  const disabled = !localId || !profileReady || !supabaseOk || loading || !registrador;
 
   const currentZoneUnits = useMemo(
-    () => byZone.find((z) => z.zone === activeZone)?.list ?? [],
-    [byZone, activeZone],
+    () => byZone.find((z) => z.zone === effectiveActiveZone)?.list ?? [],
+    [byZone, effectiveActiveZone],
   );
 
   return (
@@ -807,9 +808,12 @@ function AppccTemperaturasInner() {
       {/* ¿Quién registra hoy? — independiente por sector y día */}
       <RegistradorSelector
         value={registrador}
-        onChange={(name) => { saveRegistradorForKey(currentRegKey, name); setRegistrador(name); }}
+        onChange={(name) => {
+          saveRegistradorForKey(currentRegKey, name);
+          setRegistradorByKey((prev) => ({ ...prev, [currentRegKey]: name }));
+        }}
         storageKey={currentRegKey}
-        zoneLabel={APPCC_ZONE_LABEL[activeZone] ?? activeZone}
+        zoneLabel={APPCC_ZONE_LABEL[effectiveActiveZone] ?? effectiveActiveZone}
       />
 
       {/* Selector de fecha */}

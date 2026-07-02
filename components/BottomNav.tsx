@@ -84,12 +84,14 @@ export default function BottomNav() {
   /** Móvil: en el editor de receta se ocultan accesos rápidos; desde lg se mantiene la barra. */
   const hideOnMobileRecipeEdit =
     pathname != null && /^\/escandallos\/recetas\/.+\/editar$/.test(pathname);
+  /** En temperaturas móvil la barra tapa el guardado de lecturas y duplica la navegación actual. */
+  const hideOnMobileTemperaturas = tempActive;
 
   return (
     <nav
       className={[
         'fixed inset-x-0 bottom-0 z-[70] border-t border-zinc-200/80 bg-white/98 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] shadow-[0_-6px_24px_rgba(15,15,20,0.08)] print:hidden',
-        hideOnMobileRecipeEdit ? 'max-lg:hidden' : '',
+        hideOnMobileRecipeEdit || hideOnMobileTemperaturas ? 'max-lg:hidden' : '',
       ].join(' ')}
       aria-label="Accesos rápidos: nuevo pedido, merma, temperaturas"
     >
