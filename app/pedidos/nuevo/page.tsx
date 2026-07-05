@@ -1,10 +1,8 @@
 'use client';
 
-import { CalendarDays, Filter, Package, Search, Sparkles } from 'lucide-react';
+import { CalendarDays, Filter, Package, Search } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
-import { usePedidosOperationalSuggestions } from '@/hooks/usePedidosOperationalSuggestions';
-import { useSuggestedOrder } from '@/hooks/useSuggestedOrder';
 import { useAuth } from '@/components/AuthProvider';
 import { usePedidosOrders } from '@/components/PedidosOrdersProvider';
 import { getDemoPedidoSuppliers } from '@/lib/demo-dataset';
@@ -15,16 +13,9 @@ import { getSupabaseClient } from '@/lib/supabase-client';
 import PedidosPremiaLockedScreen from '@/components/PedidosPremiaLockedScreen';
 import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { dispatchPedidosDataChanged, usePedidosDataChangedListener } from '@/hooks/usePedidosDataChangedListener';
-import {
-  coverageDaysUntilNextDelivery,
-  suggestedOrderQuantityForPar,
-  weeklyParScaledToCoverageDays,
-} from '@/lib/pedidos-coverage';
-import PedidosOperationalSuggestions from '@/components/pedidos/PedidosOperationalSuggestions';
 import PedidosNuevoCatalogRow from '@/components/PedidosNuevoCatalogLine';
 import PedidosNuevoStickyDock from '@/components/pedidos/PedidosNuevoStickyDock';
 import PedidosSaveTemplateSheet from '@/components/pedidos/PedidosSaveTemplateSheet';
-import PedidosSuggestedOrderSheet from '@/components/pedidos/PedidosSuggestedOrderSheet';
 import PedidosUseTemplateSheet from '@/components/pedidos/PedidosUseTemplateSheet';
 import { buildPedidoWhatsappMessage } from '@/lib/pedidos-whatsapp-message';
 import { applyQuantityTapDelta, parseQuantityManualInput } from '@/lib/pedidos-order-quantity';
@@ -53,13 +44,10 @@ import {
   type CatalogSignals,
 } from '@/lib/pedidos-nuevo-catalog-stats';
 import {
-  fetchSupplierProductFavoriteIdSet,
-  setSupplierProductFavorite,
-} from '@/lib/pedidos-supplier-favorites';
-import {
   fetchOrderById,
   fetchSuppliersWithProducts,
   saveOrder,
+  setSupplierProductActive,
   supplierProductHasDistinctBilling,
   unitSupportsReceivedWeightKg,
   type PedidoOrderItem,
@@ -84,13 +72,11 @@ type NuevoPedidoOperationalState = {
   catalogTab: CatalogTabId;
   useTemplateOpen: boolean;
   saveTemplateOpen: boolean;
-  suggestedOrderOpen: boolean;
   deliveryDateFieldError: boolean;
 };
 
 const basketSessionKey = (localId: string) => `chefone_pedidos_basket:${localId}`;
 const basketLocalKey = (localId: string) => `chefone_pedidos_basket_local:${localId}`;
-const JS_DAY_TO_CONSUMPTION_DAY = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
 type StoredBasketDraft = {
   v: 1;
@@ -270,9 +256,6 @@ export default function NuevoPedidoPage() {
   const [hadContentRevisionFlag, setHadContentRevisionFlag] = React.useState(false);
   const [useTemplateOpen, setUseTemplateOpen] = React.useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = React.useState(false);
-  const [suggestedOrderOpen, setSuggestedOrderOpen] = React.useState(false);
-  /** Pausa auto-avance del carrusel de sugerencias al interactuar con buscador/cantidades/notas. */
-  const [suggestionCarouselEpoch, setSuggestionCarouselEpoch] = React.useState(0);
   const [templateSummary, setTemplateSummary] = React.useState<{
     loaded: number;
     priceUp: number;
@@ -436,63 +419,8 @@ export default function NuevoPedidoPage() {
 
   usePedidosDataChangedListener(reloadSuppliers, Boolean(hasPedidosEntry && canUse));
 
-  React.useEffect(() => {
-    setSuggestionCarouselEpoch((n) => n + 1);
-  }, [search, qtyByProductId, notes, deliveryDate]);
-
   const selectedSupplier = suppliers.find((s) => s.id === supplierId) ?? null;
   const supplierProducts = React.useMemo(() => selectedSupplier?.products ?? [], [selectedSupplier]);
-
-  const { result: suggestedOrderResult, hasSuggestion } = useSuggestedOrder({
-    localId,
-    supplierId,
-    supplierName: selectedSupplier?.name ?? '',
-    supplierProducts,
-    orders,
-    deliveryDateYmd: deliveryDate,
-    deliveryCycleWeekdays: selectedSupplier?.deliveryCycleWeekdays,
-    deliveryExceptionDates: selectedSupplier?.deliveryExceptionDates,
-  });
-
-  React.useEffect(() => {
-    setSuggestedOrderOpen(false);
-  }, [supplierId]);
-
-  const hasExistingSuggestedBasketQty = React.useMemo(
-    () => Object.values(qtyByProductId).some((q) => q > 0),
-    [qtyByProductId],
-  );
-
-  const applySuggestedOrder = React.useCallback(
-    (mode: 'fill_gaps' | 'replace') => {
-      if (!suggestedOrderResult.ok) return;
-      setQtyByProductId((prev) => {
-        const next = { ...prev };
-        for (const line of suggestedOrderResult.lines) {
-          if (mode === 'fill_gaps') {
-            const cur = next[line.supplierProductId] ?? 0;
-            if (cur > 0) continue;
-            next[line.supplierProductId] = line.suggestedQty;
-          } else {
-            next[line.supplierProductId] = line.suggestedQty;
-          }
-        }
-        return next;
-      });
-      setSuggestedOrderOpen(false);
-      setSuggestionCarouselEpoch((e) => e + 1);
-    },
-    [suggestedOrderResult],
-  );
-
-  const coverageDays = React.useMemo(() => {
-    if (!deliveryDate.trim() || !selectedSupplier) return null;
-    return coverageDaysUntilNextDelivery(
-      deliveryDate,
-      selectedSupplier.deliveryCycleWeekdays ?? [],
-      selectedSupplier.deliveryExceptionDates ?? [],
-    );
-  }, [deliveryDate, selectedSupplier]);
 
   const deliveryChipLabel = React.useMemo(() => {
     if (!deliveryDate.trim()) return null;
@@ -511,11 +439,9 @@ export default function NuevoPedidoPage() {
 
   /** Siempre «Todos» al abrir / cambiar proveedor (catálogo completo primero). */
   const [catalogTab, setCatalogTab] = React.useState<CatalogTabId>('all');
-  const [favoriteIds, setFavoriteIds] = React.useState<Set<string>>(() => new Set());
   const [catalogSignals, setCatalogSignals] = React.useState<CatalogSignals>(EMPTY_CATALOG_SIGNALS);
   React.useEffect(() => {
     setCatalogTab('all');
-    setFavoriteIds(new Set());
     setCatalogSignals(EMPTY_CATALOG_SIGNALS);
   }, [supplierId]);
 
@@ -526,16 +452,11 @@ export default function NuevoPedidoPage() {
     void (async () => {
       try {
         const supabase = getSupabaseClient();
-        const [fav, signals] = await Promise.all([
-          fetchSupplierProductFavoriteIdSet(supabase, localId, userId, supplierId),
-          fetchCatalogSignals(supabase, localId, supplierId),
-        ]);
+        const signals = await fetchCatalogSignals(supabase, localId, supplierId);
         if (cancelled) return;
-        setFavoriteIds(fav);
         setCatalogSignals(signals);
       } catch {
         if (!cancelled) {
-          setFavoriteIds(new Set());
           setCatalogSignals(EMPTY_CATALOG_SIGNALS);
         }
       }
@@ -543,7 +464,7 @@ export default function NuevoPedidoPage() {
     return () => {
       cancelled = true;
     };
-  }, [localId, supplierId, canUse, userId]);
+  }, [localId, supplierId, canUse]);
 
   const qSearch = search.trim().toLowerCase();
 
@@ -568,9 +489,6 @@ export default function NuevoPedidoPage() {
 
     const sortSmartHabitual = (rows: PedidoSupplierProduct[]) =>
       [...rows].sort((a, b) => {
-        const fa = favoriteIds.has(a.id) ? 0 : 1;
-        const fb = favoriteIds.has(b.id) ? 0 : 1;
-        if (fa !== fb) return fa - fb;
         const ma = mostOrderedIndex.get(a.id) ?? 9999;
         const mb = mostOrderedIndex.get(b.id) ?? 9999;
         if (ma !== mb) return ma - mb;
@@ -585,7 +503,6 @@ export default function NuevoPedidoPage() {
   }, [
     supplierProducts,
     qSearch,
-    favoriteIds,
     mostOrderedIndex,
     recentIndex,
   ]);
@@ -614,7 +531,6 @@ export default function NuevoPedidoPage() {
       catalogTab,
       useTemplateOpen,
       saveTemplateOpen,
-      suggestedOrderOpen,
       deliveryDateFieldError,
     });
   }, [
@@ -629,7 +545,6 @@ export default function NuevoPedidoPage() {
     saveTemplateOpen,
     search,
     searchString,
-    suggestedOrderOpen,
     supplierId,
     useTemplateOpen,
   ]);
@@ -648,7 +563,6 @@ export default function NuevoPedidoPage() {
       setCatalogTab('all');
       setUseTemplateOpen(state.useTemplateOpen);
       setSaveTemplateOpen(state.saveTemplateOpen);
-      setSuggestedOrderOpen(state.suggestedOrderOpen);
       setDeliveryDateFieldError(state.deliveryDateFieldError);
       if (state.scrollY > 0) pendingScrollRestoreRef.current = state.scrollY;
     }
@@ -682,37 +596,6 @@ export default function NuevoPedidoPage() {
   React.useEffect(() => {
     saveOperationalState();
   }, [saveOperationalState]);
-
-  const toggleProductFavorite = React.useCallback(
-    async (supplierProductId: string) => {
-      if (!localId || !userId) {
-        setMessage('Inicia sesión para usar favoritos.');
-        window.setTimeout(() => setMessage(null), 3200);
-        return;
-      }
-      if (!supplierId) return;
-      const supabase = getSupabaseClient();
-      const next = !favoriteIds.has(supplierProductId);
-      setFavoriteIds((prev) => {
-        const n = new Set(prev);
-        if (next) n.add(supplierProductId);
-        else n.delete(supplierProductId);
-        return n;
-      });
-      try {
-        await setSupplierProductFavorite(supabase, localId, userId, supplierId, supplierProductId, next);
-      } catch (e) {
-        setFavoriteIds((prev) => {
-          const n = new Set(prev);
-          if (next) n.delete(supplierProductId);
-          else n.add(supplierProductId);
-          return n;
-        });
-        setMessage(e instanceof Error ? e.message : 'No se pudo guardar el favorito.');
-      }
-    },
-    [localId, userId, supplierId, favoriteIds],
-  );
 
   React.useEffect(() => {
     if (!editingId) {
@@ -989,17 +872,6 @@ export default function NuevoPedidoPage() {
     });
   }, []);
 
-  const { suggestions: operationalSuggestions, recordDismiss: recordOperationalDismiss } =
-    usePedidosOperationalSuggestions({
-      localId,
-      supplierId,
-      orders,
-      supplierProducts,
-      qtyByProductId,
-      catalogSignals,
-      searchActive: search.trim().length > 0,
-    });
-
   const handleCatalogDelta = React.useCallback(
     (productId: string, unit: PedidoOrderItem['unit'], delta: number) => {
       adjustQty(productId, unit, delta);
@@ -1014,11 +886,51 @@ export default function NuevoPedidoPage() {
     [setQtyFromInput],
   );
 
-  const handleFavoriteToggle = React.useCallback(
-    (productId: string) => {
-      void toggleProductFavorite(productId);
+  const handleDeleteSupplierProduct = React.useCallback(
+    async (product: PedidoSupplierProduct) => {
+      if (!localId || !supplierId) return;
+      const currentQty = qtyByProductId[product.id] ?? 0;
+      const confirmed = await appConfirm(
+        currentQty > 0
+          ? 'Este artículo ya tiene cantidad en el pedido actual. Si lo eliminas, se quitará también de este pedido.'
+          : 'Se quitará del catálogo de este proveedor. Esta acción no elimina el artículo master.',
+        {
+          title: currentQty > 0 ? '¿Eliminar este artículo del proveedor?' : '¿Eliminar este artículo del proveedor?',
+          cancelLabel: 'Cancelar',
+          confirmLabel: 'Eliminar artículo',
+        },
+      );
+      if (!confirmed) return;
+
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        setMessage('Sin conexión con Supabase. No se pudo eliminar el artículo.');
+        return;
+      }
+      const previousSuppliers = suppliers;
+      const previousQty = qtyByProductId[product.id] ?? 0;
+      const nextSuppliers = suppliers.map((supplier) =>
+        supplier.id === supplierId
+          ? { ...supplier, products: supplier.products.filter((p) => p.id !== product.id) }
+          : supplier,
+      );
+
+      setSuppliers(nextSuppliers);
+      writeSuppliersSessionCache(localId, nextSuppliers);
+      setQtyByProductId((prev) => ({ ...prev, [product.id]: 0 }));
+      setMessage(null);
+
+      try {
+        await setSupplierProductActive(supabase, localId, product.id, false);
+        dispatchPedidosDataChanged();
+      } catch (e) {
+        setSuppliers(previousSuppliers);
+        writeSuppliersSessionCache(localId, previousSuppliers);
+        setQtyByProductId((prev) => ({ ...prev, [product.id]: previousQty }));
+        setMessage(e instanceof Error ? e.message : 'No se pudo eliminar el artículo del proveedor.');
+      }
     },
-    [toggleProductFavorite],
+    [localId, qtyByProductId, supplierId, suppliers],
   );
 
   const existingByProductId = React.useMemo(() => {
@@ -1671,24 +1583,7 @@ export default function NuevoPedidoPage() {
               <Package className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" strokeWidth={2} aria-hidden />
               Todos
             </button>
-            {hasSuggestion ? (
-              <button
-                type="button"
-                onClick={() => setSuggestedOrderOpen(true)}
-                className="inline-flex shrink-0 items-center gap-0.5 border-b-2 border-transparent px-2 pb-1.5 pt-0.5 text-[10px] font-semibold text-[#E30613] transition-colors hover:text-[#c50512] active:opacity-90 sm:gap-1 sm:px-2.5 sm:text-[11px]"
-              >
-                <Sparkles className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" strokeWidth={2} aria-hidden />
-                Pedido sugerido
-              </button>
-            ) : null}
           </div>
-        ) : null}
-        {selectedSupplier && supplierProducts.length > 0 ? (
-          <PedidosOperationalSuggestions
-            suggestions={operationalSuggestions}
-            onDismiss={recordOperationalDismiss}
-            interactionEpoch={suggestionCarouselEpoch}
-          />
         ) : null}
         {selectedSupplier && supplierProducts.length > 0 ? (
           <div className="border-b border-zinc-100 bg-white px-2.5 pb-1.5 pt-1.5 sm:px-3">
@@ -1729,22 +1624,6 @@ export default function NuevoPedidoPage() {
           {displayedProducts.map((p) => {
             const qty = qtyByProductId[p.id] ?? 0;
             const lineTotal = Math.round(qty * p.pricePerUnit * 100) / 100;
-            const planTodayKey = JS_DAY_TO_CONSUMPTION_DAY[new Date().getDay()];
-            const advancedSegment =
-              p.consumptionPlan?.mode === 'advanced'
-                ? (p.consumptionPlan.segments ?? []).find((segment) => segment.order_day === planTodayKey)
-                : null;
-            const advancedTargetQty =
-              advancedSegment && Number.isFinite(advancedSegment.target_quantity)
-                ? Math.max(0, Number(advancedSegment.target_quantity))
-                : null;
-            const segmentTarget =
-              advancedTargetQty != null
-                ? advancedTargetQty
-                : coverageDays != null
-                  ? weeklyParScaledToCoverageDays(p.parStock ?? 0, coverageDays)
-                  : null;
-            const suggestedQty = segmentTarget != null ? suggestedOrderQuantityForPar(p.unit, segmentTarget) : null;
             const sig = catalogSignals.lastReceptionByProductId[p.id];
             return (
               <PedidosNuevoCatalogRow
@@ -1752,15 +1631,12 @@ export default function NuevoPedidoPage() {
                 product={p}
                 qty={qty}
                 lineTotal={lineTotal}
-                suggestedQty={coverageDays != null && suggestedQty != null ? suggestedQty : null}
                 receptionQty={sig?.lastQty}
                 receptionAtIso={sig?.lastAt}
                 receptionUnitPrice={sig?.lastReceivedUnitPrice}
-                isFavorite={Boolean(userId && favoriteIds.has(p.id))}
-                favoriteDisabled={!userId}
                 onAdjustDelta={handleCatalogDelta}
                 onManualChange={handleCatalogManual}
-                onFavoriteToggle={handleFavoriteToggle}
+                onDelete={handleDeleteSupplierProduct}
               />
             );
           })}
@@ -1880,14 +1756,6 @@ export default function NuevoPedidoPage() {
         onPick={(id) => {
           router.push(`/pedidos/nuevo?templateId=${encodeURIComponent(id)}`);
         }}
-      />
-
-      <PedidosSuggestedOrderSheet
-        open={suggestedOrderOpen}
-        onClose={() => setSuggestedOrderOpen(false)}
-        result={suggestedOrderResult}
-        hasExistingQuantities={hasExistingSuggestedBasketQty}
-        onApply={applySuggestedOrder}
       />
     </div>
   );

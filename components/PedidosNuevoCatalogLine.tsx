@@ -1,9 +1,9 @@
 'use client';
 
-import { Star } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import React from 'react';
 import { usePedidosStepperHold } from '@/hooks/usePedidosStepperHold';
-import { formatQuantityWithUnit, unitPriceCatalogSuffix } from '@/lib/pedidos-format';
+import { unitPriceCatalogSuffix } from '@/lib/pedidos-format';
 import { supplierProductHasDistinctBilling, type PedidoSupplierProduct } from '@/lib/pedidos-supabase';
 import { parseQuantityManualInput } from '@/lib/pedidos-order-quantity';
 import { unitAllowsDecimalOrderQuantity } from '@/lib/pedidos-units';
@@ -44,33 +44,26 @@ export type PedidosNuevoCatalogLineProps = {
   product: PedidoSupplierProduct;
   qty: number;
   lineTotal: number;
-  suggestedQty: number | null;
   onDelta: (delta: number) => void;
   onManual: (raw: string) => void;
   receptionQty?: number;
   receptionAtIso?: string;
   receptionUnitPrice?: number;
-  /** Estrella: solo pasar si hay usuario (productId evita closures nuevos por línea). */
-  favoriteProductId?: string;
-  isFavorite?: boolean;
-  favoriteDisabled?: boolean;
-  onFavoriteToggle?: (productId: string) => void;
+  onDelete?: () => void;
+  deleteDisabled?: boolean;
 };
 
 function PedidosNuevoCatalogLineInner({
   product: p,
   qty,
   lineTotal,
-  suggestedQty,
   onDelta,
   onManual,
   receptionQty,
   receptionAtIso,
   receptionUnitPrice,
-  favoriteProductId,
-  isFavorite,
-  favoriteDisabled,
-  onFavoriteToggle,
+  onDelete,
+  deleteDisabled,
 }: PedidosNuevoCatalogLineProps) {
   const u = unitPriceCatalogSuffix[p.unit];
   const hold = usePedidosStepperHold(onDelta, {
@@ -295,13 +288,13 @@ function PedidosNuevoCatalogLineInner({
     setEditingQty(false);
   }, [draftQty, onManual, p.unit]);
 
-  const handleFavoriteClick = React.useCallback(
+  const handleDeleteClick = React.useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      if (favoriteDisabled || !favoriteProductId || !onFavoriteToggle) return;
-      onFavoriteToggle(favoriteProductId);
+      if (deleteDisabled || !onDelete) return;
+      onDelete();
     },
-    [favoriteDisabled, favoriteProductId, onFavoriteToggle],
+    [deleteDisabled, onDelete],
   );
 
   const extraHintParts: string[] = [];
@@ -313,10 +306,6 @@ function PedidosNuevoCatalogLineInner({
       `Uso: ${internalUseTotal.toLocaleString('es-ES', { maximumFractionDigits: 4 })} ${su}`,
     );
   }
-  if (suggestedQty != null) {
-    extraHintParts.push(`Tramo: ${formatQuantityWithUnit(suggestedQty, p.unit)}`);
-  }
-
   const minusDisabled = qty <= 0;
   const stepperActive = qty > 0;
 
@@ -324,30 +313,22 @@ function PedidosNuevoCatalogLineInner({
     <div
       className={[
         'px-2 transition-colors duration-200 sm:px-2.5',
-        isFavorite ? 'bg-[#FFF9F9]' : 'bg-white',
+        'bg-white',
       ].join(' ')}
     >
       <div className="flex items-start gap-1.5 py-1 sm:gap-2">
-        {favoriteProductId != null && onFavoriteToggle ? (
+        {onDelete ? (
           <button
             type="button"
-            disabled={favoriteDisabled}
-            onClick={handleFavoriteClick}
+            disabled={deleteDisabled}
+            onClick={handleDeleteClick}
             className={[
               'grid h-5 w-5 shrink-0 touch-manipulation place-items-center rounded transition-[transform,background-color,color] duration-150 active:scale-95',
-              favoriteDisabled ? 'cursor-not-allowed opacity-35' : '',
-              isFavorite
-                ? 'text-[#E30613] hover:bg-[#E30613]/8'
-                : 'text-zinc-400 hover:bg-zinc-100/90 hover:text-zinc-500',
+              deleteDisabled ? 'cursor-not-allowed opacity-35' : 'text-zinc-400 hover:bg-zinc-100/90 hover:text-zinc-500',
             ].join(' ')}
-            aria-label={isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-            aria-pressed={Boolean(isFavorite)}
+            aria-label={`Eliminar ${p.name} del proveedor`}
           >
-            <Star
-              className="h-2.5 w-2.5"
-              strokeWidth={isFavorite ? 0 : 1.35}
-              fill={isFavorite ? 'currentColor' : 'none'}
-            />
+            <Trash2 className="h-3 w-3" strokeWidth={1.6} />
           </button>
         ) : null}
 
@@ -594,16 +575,13 @@ function propsEqual(a: PedidosNuevoCatalogLineProps, b: PedidosNuevoCatalogLineP
   if (a.product !== b.product) return false;
   if (a.qty !== b.qty) return false;
   if (a.lineTotal !== b.lineTotal) return false;
-  if (a.suggestedQty !== b.suggestedQty) return false;
   if (a.receptionQty !== b.receptionQty) return false;
   if (a.receptionAtIso !== b.receptionAtIso) return false;
   if (a.receptionUnitPrice !== b.receptionUnitPrice) return false;
-  if (a.favoriteProductId !== b.favoriteProductId) return false;
-  if (a.isFavorite !== b.isFavorite) return false;
-  if (a.favoriteDisabled !== b.favoriteDisabled) return false;
+  if (a.deleteDisabled !== b.deleteDisabled) return false;
   if (a.onDelta !== b.onDelta) return false;
   if (a.onManual !== b.onManual) return false;
-  if (a.onFavoriteToggle !== b.onFavoriteToggle) return false;
+  if (a.onDelete !== b.onDelete) return false;
   return true;
 }
 
@@ -613,15 +591,13 @@ export type PedidosNuevoCatalogRowProps = {
   product: PedidoSupplierProduct;
   qty: number;
   lineTotal: number;
-  suggestedQty: number | null;
   receptionQty?: number;
   receptionAtIso?: string;
   receptionUnitPrice?: number;
-  isFavorite: boolean;
-  favoriteDisabled: boolean;
   onAdjustDelta: (productId: string, unit: Unit, delta: number) => void;
   onManualChange: (productId: string, unit: Unit, raw: string) => void;
-  onFavoriteToggle: (productId: string) => void;
+  onDelete?: (product: PedidoSupplierProduct) => void;
+  deleteDisabled?: boolean;
 };
 
 /**
@@ -632,15 +608,13 @@ export const PedidosNuevoCatalogRow = React.memo(function PedidosNuevoCatalogRow
   product,
   qty,
   lineTotal,
-  suggestedQty,
   receptionQty,
   receptionAtIso,
   receptionUnitPrice,
-  isFavorite,
-  favoriteDisabled,
   onAdjustDelta,
   onManualChange,
-  onFavoriteToggle,
+  onDelete,
+  deleteDisabled,
 }: PedidosNuevoCatalogRowProps) {
   const onDelta = React.useCallback(
     (d: number) => onAdjustDelta(product.id, product.unit, d),
@@ -650,22 +624,22 @@ export const PedidosNuevoCatalogRow = React.memo(function PedidosNuevoCatalogRow
     (raw: string) => onManualChange(product.id, product.unit, raw),
     [onManualChange, product.id, product.unit],
   );
+  const onDeleteProduct = React.useCallback(() => {
+    onDelete?.(product);
+  }, [onDelete, product]);
 
   return (
     <PedidosNuevoCatalogLineMemo
       product={product}
       qty={qty}
       lineTotal={lineTotal}
-      suggestedQty={suggestedQty}
       onDelta={onDelta}
       onManual={onManual}
       receptionQty={receptionQty}
       receptionAtIso={receptionAtIso}
       receptionUnitPrice={receptionUnitPrice}
-      favoriteProductId={product.id}
-      isFavorite={isFavorite}
-      favoriteDisabled={favoriteDisabled}
-      onFavoriteToggle={onFavoriteToggle}
+      onDelete={onDelete ? onDeleteProduct : undefined}
+      deleteDisabled={deleteDisabled}
     />
   );
 });
