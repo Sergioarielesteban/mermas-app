@@ -792,12 +792,13 @@ export default function AlbaranDetallePage() {
       } catch (e: unknown) {
         extra = ` (Aviso: ${e instanceof Error ? e.message : 'precios no actualizados'}.)`;
       }
-      const updated = await updateDeliveryNote(supabase, localId, note.id, {
-        status: 'validated',
-        validatedAt: new Date().toISOString(),
-        validatedBy: userId ?? null,
-      });
-      setNote(updated);
+      const refreshed = await fetchDeliveryNoteById(supabase, localId, id);
+      if (refreshed) {
+        setNote(refreshed.note);
+        setItems(refreshed.items);
+        setLineDrafts(refreshed.items.map(itemToLineDraft));
+        setIncidents(refreshed.incidents);
+      }
       setBanner(`Albarán confirmado.${extra}`);
     } catch (e: unknown) {
       setBanner(e instanceof Error ? e.message : 'Error.');

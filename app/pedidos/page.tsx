@@ -67,10 +67,10 @@ import {
   receptionBillsByWeight,
   receptionCalculationUnit,
   receptionLineTotals,
+  receivePurchaseOrderAtomically,
   resolveReceivedQuantityForReceptionPreview,
   resolveReceivedWeightKgForReceptionPreview,
   reopenReceivedOrderToSent,
-  setOrderStatus,
   orderItemHasDistinctBilling,
   updateOrderItemIncident,
   updateOrderItemReceived,
@@ -1725,10 +1725,7 @@ export default function PedidosPage() {
   const flushOrderReceptionDrafts = React.useCallback(
     async (order: PedidoOrder): Promise<PedidoOrder> => {
       if (!localId) return order;
-      const supabase = getSupabaseClient();
-      if (!supabase) return order;
-      const nextItems = await Promise.all(
-        order.items.map(async (item) => {
+      const nextItems = order.items.map((item) => {
           const price = getLinePrice(item);
           if (receptionBillsByWeight(item)) {
             const rawW = weightInputRef.current[item.id];
@@ -1753,25 +1750,8 @@ export default function PedidosPage() {
               ...(item.unit !== 'kg' ? { receivedPricePerKg: parsedPpk } : {}),
               ...(item.unit === 'kg' && parsedWeight != null ? { receivedQuantity: parsedWeight } : {}),
             };
-            await updateOrderItemReceived(
-              supabase,
-              localId,
-              item.id,
-              item.unit === 'kg' && parsedWeight != null ? parsedWeight : item.receivedQuantity,
-            );
-            await updateOrderItemReceivedWeightKg(
-              supabase,
-              localId,
-              item.id,
-              parsedWeight,
-            );
-            await persistReceptionItemTotals(supabase, localId, merged);
             const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
             const nextMerged: PedidoOrderItem = { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal };
-            void commitPriceEvolutionFromReceivedOrderItem(supabase, localId, nextMerged, {
-              userId,
-              receivedAt: new Date().toISOString(),
-            }).catch(() => {});
             return nextMerged;
           }
           const rawOq = orderQtyInputRef.current[item.id];
@@ -1783,19 +1763,13 @@ export default function PedidosPage() {
             receivedWeightKg: null,
             receivedPricePerKg: null,
           };
-          await persistReceptionItemTotals(supabase, localId, merged);
           const { lineTotal, effectivePricePerUnit } = receptionLineTotals(merged);
           const nextMerged: PedidoOrderItem = { ...merged, pricePerUnit: effectivePricePerUnit, lineTotal };
-          void commitPriceEvolutionFromReceivedOrderItem(supabase, localId, nextMerged, {
-            userId,
-            receivedAt: new Date().toISOString(),
-          }).catch(() => {});
           return nextMerged;
-        }),
-      );
+        });
       return { ...order, items: nextItems };
     },
-    [catalogNameByProductId, getLinePrice, localId, resolvePpkForItemSnap, userId],
+    [catalogNameByProductId, getLinePrice, localId, resolvePpkForItemSnap],
   );
 
   const commitSentOrderAsReceived = React.useCallback(
@@ -1808,13 +1782,27 @@ export default function PedidosPage() {
       setMessage(null);
       setReceivingOrderId(orderId);
       return flushOrderReceptionDrafts(snap)
-        .then((flushedSnap) =>
-          setOrderStatus(supabase, localId, snap.id, 'received', new Date().toISOString(), {
-            expectedUpdatedAt: snap.updatedAt,
-          }).then(() => flushedSnap),
-        )
         .then(async (flushedSnap) => {
-          const nowIso = new Date().toISOString();
+          const receivedAt = new Date().toISOString();
+          await receivePurchaseOrderAtomically(
+            supabase,
+            localId,
+            snap.id,
+            receivedAt,
+            flushedSnap.items.map((item) => ({
+              itemId: item.id,
+              receivedQuantity: item.receivedQuantity,
+              receivedWeightKg: item.receivedWeightKg ?? null,
+              receivedPricePerKg: item.receivedPricePerKg ?? null,
+              pricePerUnit: item.pricePerUnit,
+              lineTotal: item.lineTotal,
+            })),
+            { expectedOrderUpdatedAt: snap.updatedAt },
+          );
+          return { flushedSnap, receivedAt };
+        })
+        .then(async ({ flushedSnap, receivedAt }) => {
+          const nowIso = receivedAt;
           const receivedSnap: PedidoOrder = {
             ...flushedSnap,
             status: 'received',
@@ -1822,6 +1810,15 @@ export default function PedidosPage() {
             priceReviewArchivedAt: undefined,
             updatedAt: nowIso,
           };
+
+          await Promise.all(
+            receivedSnap.items.map((item) =>
+              commitPriceEvolutionFromReceivedOrderItem(supabase, localId, item, {
+                userId,
+                receivedAt: nowIso,
+              }).catch(() => ({ changed: false })),
+            ),
+          );
 
           let inventoryStock: PedidosRecepcionSummaryPayload['inventoryStock'];
           const supInv = getSupabaseClient();

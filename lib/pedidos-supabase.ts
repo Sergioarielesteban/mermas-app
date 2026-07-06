@@ -3052,6 +3052,67 @@ export async function setOrderStatus(
   }
 }
 
+export type ReceivePurchaseOrderAtomicItem = {
+  itemId: string;
+  receivedQuantity: number;
+  receivedWeightKg: number | null;
+  receivedPricePerKg: number | null;
+  pricePerUnit: number;
+  lineTotal: number;
+};
+
+export async function receivePurchaseOrderAtomically(
+  supabase: SupabaseClient,
+  localId: string,
+  orderId: string,
+  receivedAt: string,
+  items: ReceivePurchaseOrderAtomicItem[],
+  options?: { expectedOrderUpdatedAt?: string | null },
+): Promise<{ orderUpdatedAt: string | null }> {
+  if (items.length === 0) throw new Error('No se puede recibir un pedido sin líneas.');
+  const payload = items.map((item) => ({
+    item_id: item.itemId,
+    received_quantity: Math.max(0, Math.round(item.receivedQuantity * 100) / 100),
+    received_weight_kg:
+      item.receivedWeightKg != null && Number.isFinite(item.receivedWeightKg) && item.receivedWeightKg > 0
+        ? Math.round(item.receivedWeightKg * 1000) / 1000
+        : null,
+    received_price_per_kg:
+      item.receivedPricePerKg != null && Number.isFinite(item.receivedPricePerKg) && item.receivedPricePerKg > 0
+        ? Math.round(item.receivedPricePerKg * 10000) / 10000
+        : null,
+    price_per_unit: Math.max(0, Math.round(item.pricePerUnit * 10000) / 10000),
+    line_total: Math.max(0, Math.round(item.lineTotal * 100) / 100),
+  }));
+
+  const { data, error } = await supabase.rpc('receive_purchase_order_atomic', {
+    p_order_id: orderId,
+    p_local_id: localId,
+    p_received_at: receivedAt,
+    p_items: payload,
+    p_expected_order_updated_at: options?.expectedOrderUpdatedAt ?? null,
+  });
+
+  if (error) {
+    if (isOrderConcurrencyConflictMessage(error.message)) {
+      throw new Error('Otro dispositivo actualizó este pedido antes que tú. Recarga Pedidos y vuelve a recibir.');
+    }
+    if (error.message.toLowerCase().includes('receive_purchase_order_atomic')) {
+      throw new Error(
+        'Falta la función SQL receive_purchase_order_atomic en Supabase. Ejecuta supabase-pedidos-critical-operations.sql y vuelve a intentar.',
+      );
+    }
+    throw new Error(error.message);
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  const orderUpdatedAt =
+    row && typeof row === 'object' && 'order_updated_at' in row
+      ? String((row as { order_updated_at: string | null }).order_updated_at ?? '')
+      : null;
+  return { orderUpdatedAt: orderUpdatedAt || null };
+}
+
 /** Pedido marcado recibido por error: vuelve a enviados sin tocar sent_at ni las líneas. */
 export async function reopenReceivedOrderToSent(supabase: SupabaseClient, localId: string, orderId: string) {
   const { data, error } = await supabase

@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DeliveryNoteItem } from '@/lib/delivery-notes-supabase';
-import { fetchSupplierProductRow, updateSupplierProductPriceFromRecepcion } from '@/lib/pedidos-supabase';
 
 export type DeliveryNoteCatalogPriceSyncResult = {
   updated: number;
@@ -17,47 +16,43 @@ export async function syncCatalogPricesFromValidatedDeliveryNote(
   supabase: SupabaseClient,
   localId: string,
   deliveryNoteId: string,
-  items: DeliveryNoteItem[],
+  _items: DeliveryNoteItem[],
   userId: string | null,
   opts?: { receptionDate?: string | null },
 ): Promise<DeliveryNoteCatalogPriceSyncResult> {
-  let updated = 0;
-  let unchanged = 0;
-  let skipped = 0;
-  const receptionDate = opts?.receptionDate ?? null;
+  const receptionDate =
+    opts?.receptionDate && /^\d{4}-\d{2}-\d{2}/.test(opts.receptionDate)
+      ? opts.receptionDate.slice(0, 10)
+      : null;
+  const { data, error } = await supabase.rpc('confirm_delivery_note_atomic', {
+    p_delivery_note_id: deliveryNoteId,
+    p_local_id: localId,
+    p_validated_by: userId,
+    p_reception_date: receptionDate,
+  });
 
-  for (const item of items) {
-    const pid = item.internalProductId;
-    const up = item.unitPrice;
-    if (!pid || up == null || !Number.isFinite(up) || up < 0) {
-      skipped += 1;
-      continue;
+  if (error) {
+    if (error.message.toLowerCase().includes('confirm_delivery_note_atomic')) {
+      throw new Error(
+        'Falta la función SQL confirm_delivery_note_atomic en Supabase. Ejecuta supabase-pedidos-critical-operations.sql y vuelve a intentar.',
+      );
     }
-
-    try {
-      const cat = await fetchSupplierProductRow(supabase, localId, pid);
-      if (!cat || String(cat.unit) !== String(item.unit)) {
-        skipped += 1;
-        continue;
-      }
-      const { changed } = await updateSupplierProductPriceFromRecepcion(supabase, localId, pid, up, {
-        deliveryNoteId,
-        receptionDate,
-        userId,
-        existingRow: cat,
-        comparableQuantity: item.quantity > 0 ? item.quantity : null,
-      });
-      if (changed) updated += 1;
-      else unchanged += 1;
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message.toLowerCase() : '';
-      if (msg.includes('producto de proveedor no encontrado')) {
-        skipped += 1;
-        continue;
-      }
-      throw e;
-    }
+    throw new Error(error.message);
   }
 
-  return { updated, unchanged, skipped };
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    updated:
+      row && typeof row === 'object' && 'updated_count' in row
+        ? Number((row as { updated_count: number | null }).updated_count ?? 0)
+        : 0,
+    unchanged:
+      row && typeof row === 'object' && 'unchanged_count' in row
+        ? Number((row as { unchanged_count: number | null }).unchanged_count ?? 0)
+        : 0,
+    skipped:
+      row && typeof row === 'object' && 'skipped_count' in row
+        ? Number((row as { skipped_count: number | null }).skipped_count ?? 0)
+        : 0,
+  };
 }
