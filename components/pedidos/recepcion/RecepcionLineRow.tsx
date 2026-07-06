@@ -7,7 +7,6 @@ import {
   unitPriceCatalogSuffix,
 } from '@/lib/pedidos-format';
 import {
-  euroPerKgSuggestionHint,
   formatKgInputDisplay,
   formatPpkInputDisplay,
   getDefaultReceivedKgNumeric,
@@ -108,7 +107,6 @@ function RecepcionLineRowInner({
   item,
   lineDisplayName,
   suggestedEuroPerKg,
-  suggestionSource,
   lastHistoricoComparable = null,
   priceHintsVersion = 0,
   commitWeightInput,
@@ -308,17 +306,6 @@ function RecepcionLineRowInner({
           <span className="tabular-nums text-zinc-600">{lineSummary.totalLinea}</span>
         </p>
       </div>
-      {billsByWeight &&
-      item.unit !== 'kg' &&
-      item.estimatedKgPerUnit != null &&
-      item.estimatedKgPerUnit > 0 ? (
-        <p className="mt-0.5 text-[9px] leading-tight text-zinc-500">
-          Est. {(item.quantity * item.estimatedKgPerUnit).toFixed(2)} kg · {item.estimatedKgPerUnit.toFixed(2)} kg/{item.unit}
-          {item.receivedQuantity > 0
-            ? ` · recib.: ${(item.receivedQuantity * item.estimatedKgPerUnit).toFixed(2)} kg`
-            : ''}
-        </p>
-      ) : null}
       {billsByWeight ? (
         <div className={blockCls}>
           <div className="flex flex-wrap items-end gap-x-2 gap-y-0.5">
@@ -379,21 +366,6 @@ function RecepcionLineRowInner({
               </span>
             </div>
           </div>
-          {item.unit !== 'kg' ? (
-            <p className="mt-0.5 text-[8px] leading-tight text-zinc-400">
-              {suggestionSource ? (
-                <span className="text-zinc-500">{euroPerKgSuggestionHint(suggestionSource)} · </span>
-              ) : null}
-              <span>
-                {previewItem.receivedPricePerKg != null &&
-                previewItem.receivedPricePerKg > 0 &&
-                previewItem.receivedWeightKg != null &&
-                previewItem.receivedWeightKg > 0
-                  ? `Ref. ${previewItem.pricePerUnit.toFixed(2)} €/${unitPriceCatalogSuffix[item.unit]}`
-                  : 'kg × €/kg; precio por ud. debajo'}
-              </span>
-            </p>
-          ) : null}
           <div className="mt-1 flex flex-wrap items-end gap-x-2 gap-y-0.5 border-t border-zinc-200/40 pt-1">
             <div className="flex min-w-0 flex-1 flex-col gap-px sm:max-w-[9.5rem]">
               <span className="text-[8px] font-semibold uppercase tracking-wide text-zinc-400">
@@ -510,13 +482,18 @@ function RecepcionLineRowInner({
             const base = item.basePricePerUnit;
             if (draft == null || Math.abs(draft - base) <= 0.005) return null;
             return (
-              <p className="text-[10px] font-semibold leading-tight text-amber-900">
-                Diferencia: {draft >= base ? '+' : ''}
-                {(draft - base).toFixed(2)} € vs pedido
-                {base > 0
-                  ? ` (${draft >= base ? '+' : ''}${(((draft - base) / base) * 100).toFixed(1)} %)`
-                  : ''}
-              </p>
+              <details className="mt-1 rounded-lg border border-amber-200/70 bg-amber-50/50 px-2 py-1">
+                <summary className="cursor-pointer list-none text-[10px] font-semibold leading-tight text-amber-900">
+                  Diferencia de precio
+                </summary>
+                <p className="mt-1 text-[10px] font-semibold leading-tight text-amber-900">
+                  {draft >= base ? '+' : ''}
+                  {(draft - base).toFixed(2)} € vs pedido
+                  {base > 0
+                    ? ` (${draft >= base ? '+' : ''}${(((draft - base) / base) * 100).toFixed(1)} %)`
+                    : ''}
+                </p>
+              </details>
             );
           })()
         : null}

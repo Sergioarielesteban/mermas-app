@@ -102,6 +102,84 @@ begin
 end;
 $$;
 
+create or replace function public.replace_delivery_note_items_atomic(
+  p_delivery_note_id uuid,
+  p_local_id uuid,
+  p_items jsonb
+)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if coalesce(jsonb_typeof(p_items), 'null') <> 'array' then
+    raise exception 'p_items debe ser un array JSON';
+  end if;
+
+  if not exists (
+    select 1
+    from public.delivery_notes dn
+    where dn.id = p_delivery_note_id
+      and dn.local_id = p_local_id
+      and dn.status not in ('validated', 'archived')
+  ) then
+    raise exception 'Albarán no encontrado o cerrado';
+  end if;
+
+  delete from public.delivery_note_items dni
+  where dni.local_id = p_local_id
+    and dni.delivery_note_id = p_delivery_note_id;
+
+  if jsonb_array_length(p_items) = 0 then
+    return;
+  end if;
+
+  insert into public.delivery_note_items (
+    local_id,
+    delivery_note_id,
+    supplier_product_name,
+    internal_product_id,
+    quantity,
+    unit,
+    unit_price,
+    line_subtotal,
+    vat_rate,
+    matched_order_item_id,
+    match_status,
+    notes,
+    sort_order
+  )
+  select
+    p_local_id,
+    p_delivery_note_id,
+    btrim(coalesce(i.supplier_product_name, '')),
+    i.internal_product_id,
+    greatest(0, coalesce(i.quantity, 0)),
+    coalesce(nullif(i.unit, ''), 'ud'),
+    i.unit_price,
+    i.line_subtotal,
+    i.vat_rate,
+    i.matched_order_item_id,
+    coalesce(nullif(i.match_status, ''), 'not_applicable'),
+    btrim(coalesce(i.notes, '')),
+    coalesce(i.sort_order, 0)
+  from jsonb_to_recordset(p_items) as i(
+    supplier_product_name text,
+    internal_product_id uuid,
+    quantity numeric,
+    unit text,
+    unit_price numeric,
+    line_subtotal numeric,
+    vat_rate numeric,
+    matched_order_item_id uuid,
+    match_status text,
+    notes text,
+    sort_order int
+  );
+end;
+$$;
+
 create or replace function public.confirm_delivery_note_atomic(
   p_delivery_note_id uuid,
   p_local_id uuid,

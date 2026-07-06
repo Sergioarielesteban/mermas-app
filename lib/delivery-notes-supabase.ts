@@ -536,16 +536,7 @@ export async function replaceDeliveryNoteItems(
   noteId: string,
   drafts: DeliveryNoteItemDraft[],
 ): Promise<DeliveryNoteItem[]> {
-  const { error: delErr } = await supabase
-    .from('delivery_note_items')
-    .delete()
-    .eq('local_id', localId)
-    .eq('delivery_note_id', noteId);
-  if (delErr) throw new Error(delErr.message);
-  if (drafts.length === 0) return [];
   const payload = drafts.map((d, idx) => ({
-    local_id: localId,
-    delivery_note_id: noteId,
     supplier_product_name: d.supplierProductName.trim(),
     internal_product_id: d.internalProductId ?? null,
     quantity: d.quantity,
@@ -558,7 +549,25 @@ export async function replaceDeliveryNoteItems(
     notes: d.notes?.trim() ?? '',
     sort_order: idx,
   }));
-  const { data, error } = await supabase.from('delivery_note_items').insert(payload).select(ITEM_SEL);
+
+  const { error: rpcError } = await supabase.rpc('replace_delivery_note_items_atomic', {
+    p_delivery_note_id: noteId,
+    p_local_id: localId,
+    p_items: payload,
+  });
+  if (rpcError) {
+    if (rpcError.message.toLowerCase().includes('replace_delivery_note_items_atomic')) {
+      throw new Error('No se pudieron guardar las líneas del albarán.');
+    }
+    throw new Error(rpcError.message);
+  }
+
+  const { data, error } = await supabase
+    .from('delivery_note_items')
+    .select(ITEM_SEL)
+    .eq('local_id', localId)
+    .eq('delivery_note_id', noteId)
+    .order('sort_order', { ascending: true });
   if (error) throw new Error(error.message);
   return ((data ?? []) as ItemRow[]).map(mapItem);
 }

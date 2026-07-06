@@ -25,7 +25,6 @@ import { canAccessPedidos, canUsePedidosModule } from '@/lib/pedidos-access';
 import { createDeliveryNoteSignedUrl } from '@/lib/delivery-notes-storage';
 import { buildDeliveryNoteAccountingPreview } from '@/lib/delivery-notes-accounting';
 import {
-  deliveryNoteFlowStepIndex,
   deliveryNoteStatusVisual,
   MATCH_STATUS_LABEL,
   matchRowAccent,
@@ -170,27 +169,6 @@ function normalizeDraftCompare(d: DeliveryNoteItemDraft): string {
   });
 }
 
-function KpiCell({
-  label,
-  value,
-  tone = 'zinc',
-}: {
-  label: string;
-  value: string;
-  tone?: 'zinc' | 'amber';
-}) {
-  const toneClasses =
-    tone === 'amber'
-      ? 'bg-amber-50 ring-amber-200 text-amber-900'
-      : 'bg-zinc-50 ring-zinc-200 text-zinc-900';
-  return (
-    <div className={`rounded-2xl px-2.5 py-2 ring-1 ${toneClasses}`}>
-      <p className="text-[9.5px] font-bold uppercase tracking-wide opacity-80">{label}</p>
-      <p className="mt-0.5 text-[15px] font-black tabular-nums leading-tight">{value}</p>
-    </div>
-  );
-}
-
 function KvRow({
   label,
   value,
@@ -214,43 +192,6 @@ function KvRow({
       >
         {value}
       </dd>
-    </div>
-  );
-}
-
-function StatusStepper({ status }: { status: DeliveryNoteStatus }) {
-  const idx = deliveryNoteFlowStepIndex(status);
-  const isIncident = status === 'with_incidents';
-  const isArchived = status === 'archived';
-  const isValidated = status === 'validated';
-  const steps = [
-    { label: 'Carga', done: true },
-    { label: 'OCR', done: idx >= 1 || isValidated || isArchived },
-    { label: 'Revisión', done: idx >= 2 || isValidated || isArchived, warning: isIncident },
-    { label: 'Cerrado', done: isValidated || isArchived },
-  ];
-  return (
-    <div className="mt-3">
-      <div className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2">
-        {steps.map((step, i) => (
-          <React.Fragment key={step.label}>
-            <span
-              className={[
-                'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wide',
-                step.warning
-                  ? 'bg-red-50 text-red-800 ring-1 ring-red-200'
-                  : step.done
-                    ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'
-                    : 'bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200',
-              ].join(' ')}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-              {step.label}
-            </span>
-            {i < steps.length - 1 ? <span className="h-px flex-1 bg-zinc-200" aria-hidden /> : null}
-          </React.Fragment>
-        ))}
-      </div>
     </div>
   );
 }
@@ -626,7 +567,8 @@ export default function AlbaranDetallePage() {
       }
       setBanner('Líneas guardadas.');
     } catch (e: unknown) {
-      setBanner(e instanceof Error ? e.message : 'Error al guardar líneas.');
+      if (process.env.NODE_ENV === 'development') console.error('[Pedidos albaranes] save lines failed:', e);
+      setBanner('No se pudieron guardar las líneas. Inténtalo de nuevo.');
     } finally {
       setBusy(false);
     }
@@ -659,7 +601,8 @@ export default function AlbaranDetallePage() {
       }
       setBanner('Cabecera y líneas guardadas.');
     } catch (e: unknown) {
-      setBanner(e instanceof Error ? e.message : 'Error al guardar.');
+      if (process.env.NODE_ENV === 'development') console.error('[Pedidos albaranes] save note failed:', e);
+      setBanner('No se pudo guardar el albarán. Inténtalo de nuevo.');
     } finally {
       setBusy(false);
     }
@@ -740,7 +683,8 @@ export default function AlbaranDetallePage() {
       }
       setBanner('Incidencias generadas desde comparación.');
     } catch (e: unknown) {
-      setBanner(e instanceof Error ? e.message : 'Error.');
+      if (process.env.NODE_ENV === 'development') console.error('[Pedidos albaranes] confirm failed:', e);
+      setBanner('No se pudo confirmar el albarán. Inténtalo de nuevo.');
     } finally {
       setBusy(false);
     }
@@ -914,9 +858,8 @@ export default function AlbaranDetallePage() {
 
   const statusVis = deliveryNoteStatusVisual(note.status);
   const headerTotal = parseOpt(totalAmount);
-  const linesSum = accountingPreview?.computedLinesTotal ?? null;
   const isClosed = note.status === 'validated' || note.status === 'archived';
-  const showStepper = !isClosed;
+  const showOcrSupport = Boolean(ocrPreview && (note.ocrStatus === 'failed' || note.ocrStatus === 'partial'));
 
   // Próxima acción sugerida — un único CTA según el estado real.
   type NextAction =
@@ -955,16 +898,6 @@ export default function AlbaranDetallePage() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            disabled={busy || loading}
-            onClick={() => void exportReceptionPdf()}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 text-[12px] font-bold text-zinc-700"
-            title="Descargar informe de recepción en PDF"
-          >
-            <FileDown className="h-3.5 w-3.5" aria-hidden />
-            PDF recepción
-          </button>
           <Link
             href="/pedidos/albaranes"
             className="shrink-0 text-[12px] font-semibold text-zinc-500 hover:text-zinc-900"
@@ -975,7 +908,7 @@ export default function AlbaranDetallePage() {
       </header>
 
       {/* HERO DE ESTADO */}
-      <section className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm sm:p-4">
         <div className="flex flex-wrap items-center gap-2">
           <span
             className={`inline-flex rounded-full px-3 py-1 text-[10.5px] font-black uppercase tracking-wide ${statusVis.chipClass}`}
@@ -999,25 +932,11 @@ export default function AlbaranDetallePage() {
           ) : null}
         </div>
 
-        {showStepper ? <StatusStepper status={note.status} /> : null}
-
-        {/* KPI strip horizontal */}
-        <div className="mt-3 grid grid-cols-4 gap-2">
-          <KpiCell label="Líneas" value={String(items.length)} />
-          <KpiCell
-            label="Total"
-            value={headerTotal != null ? `${headerTotal.toFixed(2)} €` : '—'}
-          />
-          <KpiCell
-            label="Σ líneas"
-            value={linesSum != null ? `${linesSum.toFixed(2)} €` : '—'}
-          />
-          <KpiCell
-            label="Desajustes"
-            value={order ? String(mismatchCount) : '—'}
-            tone={order && mismatchCount > 0 ? 'amber' : 'zinc'}
-          />
-        </div>
+        <p className="mt-2 text-[11.5px] font-semibold text-zinc-500">
+          {items.length} línea{items.length === 1 ? '' : 's'}
+          {headerTotal != null ? ` · ${headerTotal.toFixed(2)} €` : ''}
+          {order && mismatchCount > 0 ? ` · ${mismatchCount} desajuste${mismatchCount === 1 ? '' : 's'}` : ''}
+        </p>
 
         {/* Próxima acción */}
         {nextAction.kind !== 'none' ? (
@@ -1044,7 +963,7 @@ export default function AlbaranDetallePage() {
                   onClick={() => void confirmAlbaran()}
                   className="inline-flex h-10 items-center gap-2 rounded-2xl bg-emerald-600 px-4 text-[13px] font-black text-white shadow-md disabled:opacity-50"
                 >
-                  <ShieldCheck className="h-4 w-4" aria-hidden /> Confirmar
+                  <ShieldCheck className="h-4 w-4" aria-hidden /> Confirmar albarán
                 </button>
               ) : null}
               {nextAction.kind === 'link' ? (
@@ -1104,11 +1023,12 @@ export default function AlbaranDetallePage() {
       ) : null}
 
       {/* Pedido vs albarán */}
-      <section
+      <details
         id="vincular"
-        className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5"
+        className="group rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm open:p-4 sm:open:p-5"
+        open={!order}
       >
-        <div className="flex items-start gap-3">
+        <summary className="flex cursor-pointer list-none items-start gap-3">
           <div
             className={[
               'flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1',
@@ -1120,14 +1040,15 @@ export default function AlbaranDetallePage() {
             <Link2 className="h-5 w-5" aria-hidden />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[15px] font-black text-zinc-900">Pedido vs albarán</h2>
+            <h2 className="text-[15px] font-black text-zinc-900">Pedido vinculado</h2>
             <p className="text-[12px] text-zinc-500">
               {order
-                ? 'Comparación línea a línea con el pedido vinculado.'
+                ? 'Comparación disponible si necesitas revisar diferencias.'
                 : 'Vincula con un pedido para detectar diferencias automáticamente.'}
             </p>
           </div>
-        </div>
+          <ChevronDown className="mt-1 h-5 w-5 shrink-0 text-zinc-400 transition group-open:rotate-180" aria-hidden />
+        </summary>
 
         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
           <select
@@ -1318,7 +1239,7 @@ export default function AlbaranDetallePage() {
             </p>
           </div>
         )}
-      </section>
+      </details>
 
       {/* Líneas */}
       <section
@@ -1834,7 +1755,7 @@ export default function AlbaranDetallePage() {
       </details>
 
       {/* Datos contables — sólo si hay preview */}
-      {accountingPreview ? (
+      {accountingPreview && isClosed ? (
         <details
           ref={accountingDetailsRef}
           className="group rounded-3xl border border-zinc-200 bg-zinc-50/60 p-4 shadow-sm open:bg-white open:shadow-md sm:p-5"
@@ -1881,7 +1802,7 @@ export default function AlbaranDetallePage() {
         </details>
       ) : null}
 
-      {ocrPreview ? (
+      {showOcrSupport ? (
         <details
           ref={ocrDetailsRef}
           className="group rounded-3xl border border-zinc-200 bg-zinc-50/60 p-4 shadow-sm open:bg-white sm:p-5"
@@ -1919,7 +1840,7 @@ export default function AlbaranDetallePage() {
             className="h-12 flex-1 rounded-2xl bg-emerald-600 text-[13.5px] font-black text-white shadow-md disabled:opacity-30"
             title={linesDirty ? 'Guarda los cambios antes' : undefined}
           >
-            Confirmar
+	            Confirmar albarán
           </button>
           <button
             type="button"
@@ -1937,12 +1858,24 @@ export default function AlbaranDetallePage() {
           <p className="text-[12.5px] font-semibold text-zinc-700">
             {note.status === 'validated' ? 'Albarán validado' : 'Albarán archivado'}
           </p>
-          <Link
-            href="/pedidos/albaranes"
-            className="inline-flex h-10 items-center rounded-2xl border border-zinc-200 bg-white px-4 text-[12.5px] font-black text-zinc-700"
-          >
-            Volver a bandeja
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={busy || loading}
+              onClick={() => void exportReceptionPdf()}
+              className="inline-flex h-10 items-center gap-1.5 rounded-2xl border border-zinc-200 bg-white px-3 text-[12px] font-black text-zinc-700"
+              title="Descargar informe de recepción en PDF"
+            >
+              <FileDown className="h-3.5 w-3.5" aria-hidden />
+              PDF
+            </button>
+            <Link
+              href="/pedidos/albaranes"
+              className="inline-flex h-10 items-center rounded-2xl border border-zinc-200 bg-white px-4 text-[12.5px] font-black text-zinc-700"
+            >
+              Volver
+            </Link>
+          </div>
         </div>
       )}
 

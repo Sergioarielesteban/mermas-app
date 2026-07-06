@@ -4395,54 +4395,58 @@ export default function PedidosPage() {
         })()
       ) : null}
 
-      <section className="rounded-[24px] border border-zinc-200/80 bg-white/95 p-3 shadow-[0_14px_34px_rgba(15,23,42,0.04)] ring-1 ring-zinc-100/80 sm:p-4">
-        <nav aria-label="Secciones del módulo Pedidos" className="space-y-2.5">
-          <div className="grid grid-cols-2 gap-2.5">
+      <details className="group rounded-2xl border border-zinc-200/80 bg-white/80 px-3 py-2 shadow-sm ring-1 ring-zinc-100/80">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[12px] font-black uppercase tracking-wide text-zinc-600">
+          Herramientas del módulo
+          <ChevronDown className="h-4 w-4 text-zinc-400 transition group-open:rotate-180" strokeWidth={2.25} aria-hidden />
+        </summary>
+        <nav aria-label="Secciones del módulo Pedidos" className="mt-2 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
             <Link
               href="/pedidos/proveedores"
               className={[
-                'group flex min-h-[2.8rem] items-center gap-2 rounded-[18px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[3.2rem] sm:py-2.5',
+                'group flex min-h-[2.35rem] items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition active:scale-[0.99]',
                 pedidosNavActive('/pedidos/proveedores')
-                  ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
-                  : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
+                  ? 'border-[#D32F2F]/18 bg-[#FFF7F5] ring-1 ring-[#D32F2F]/10'
+                  : 'border-zinc-200/80 bg-white ring-1 ring-zinc-200/70',
               ].join(' ')}
             >
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#D32F2F]/[0.09] text-[#D32F2F] ring-1 ring-[#D32F2F]/12">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#D32F2F]/[0.09] text-[#D32F2F] ring-1 ring-[#D32F2F]/12">
                 <Building2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </span>
-              <span className="block text-[13px] font-black leading-tight text-zinc-950 sm:text-[14px]">Proveedores</span>
+              <span className="block text-[12px] font-black leading-tight text-zinc-900">Proveedores</span>
             </Link>
 
             <Link
               href="/pedidos/articulos"
               className={[
-                'group flex min-h-[2.8rem] items-center gap-2 rounded-[18px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[3.2rem] sm:py-2.5',
+                'group flex min-h-[2.35rem] items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition active:scale-[0.99]',
                 pedidosNavActive('/pedidos/articulos')
-                  ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
-                  : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
+                  ? 'border-[#D32F2F]/18 bg-[#FFF7F5] ring-1 ring-[#D32F2F]/10'
+                  : 'border-zinc-200/80 bg-white ring-1 ring-zinc-200/70',
               ].join(' ')}
             >
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200/70">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200/70">
                 <Package className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </span>
-              <span className="block text-[13px] font-black leading-tight text-zinc-950 sm:text-[14px]">Artículos</span>
+              <span className="block text-[12px] font-black leading-tight text-zinc-900">Artículos</span>
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-2">
             <Link
               href="/pedidos/precios"
               className={[
-                'group flex min-h-[2.8rem] items-center gap-2 rounded-[18px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[3.2rem] sm:py-2.5',
+                'group flex min-h-[2.35rem] items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition active:scale-[0.99]',
                 pedidosNavActive('/pedidos/precios')
-                  ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
-                  : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
+                  ? 'border-[#D32F2F]/18 bg-[#FFF7F5] ring-1 ring-[#D32F2F]/10'
+                  : 'border-zinc-200/80 bg-white ring-1 ring-zinc-200/70',
               ].join(' ')}
             >
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70">
                 <TrendingUp className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </span>
-              <span className="block text-[13px] font-black leading-tight text-zinc-950 sm:text-[14px]">Evolución de precio</span>
+              <span className="block text-[12px] font-black leading-tight text-zinc-900">Precios</span>
             </Link>
 
             <Link
@@ -4450,35 +4454,32 @@ export default function PedidosPage() {
               title="Histórico y compras del mes"
               aria-label="Abrir compras del mes"
               className={[
-                'group flex min-h-[2.8rem] items-center gap-2 rounded-[18px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[3.2rem] sm:py-2.5',
+                'group flex min-h-[2.35rem] items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition active:scale-[0.99]',
                 pedidosNavActive('/pedidos/historial-mes')
-                  ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
-                  : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
+                  ? 'border-[#D32F2F]/18 bg-[#FFF7F5] ring-1 ring-[#D32F2F]/10'
+                  : 'border-zinc-200/80 bg-white ring-1 ring-zinc-200/70',
               ].join(' ')}
             >
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200/70">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200/70">
                 <LineChart className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               </span>
-              <span className="block text-[13px] font-black leading-tight text-zinc-950 sm:text-[14px]">Compras del mes</span>
+              <span className="block text-[12px] font-black leading-tight text-zinc-900">Compras</span>
             </Link>
           </div>
 
           <Link
             href="/pedidos/albaranes"
             className={[
-              'group flex min-h-[3.75rem] w-full items-center gap-3 rounded-[20px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[4.5rem] sm:py-2.5',
+              'group flex min-h-[2.5rem] w-full items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition active:scale-[0.99]',
               pedidosNavActive('/pedidos/albaranes')
-                ? 'border-[#D32F2F]/18 bg-[#FFF0EE] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
-                : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
+                ? 'border-[#D32F2F]/18 bg-[#FFF0EE] ring-1 ring-[#D32F2F]/10'
+                : 'border-zinc-200/80 bg-white ring-1 ring-zinc-200/70',
             ].join(' ')}
           >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-rose-50 text-rose-700 ring-1 ring-rose-200/70">
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-rose-50 text-rose-700 ring-1 ring-rose-200/70">
               <FileText className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block font-serif text-[15px] leading-tight text-zinc-950">Albaranes</span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-zinc-600">OCR · recepción · validación</span>
-            </span>
+            <span className="min-w-0 flex-1 text-[12px] font-black leading-tight text-zinc-900">Albaranes</span>
             <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300 transition group-hover:translate-x-0.5 group-hover:text-zinc-400" strokeWidth={2.25} aria-hidden />
           </Link>
 
@@ -4487,24 +4488,20 @@ export default function PedidosPage() {
             title="Consumo semanal por producto"
             aria-label="Abrir consumo semanal por producto"
             className={[
-              'group flex min-h-[3.75rem] w-full items-center gap-3 rounded-[20px] border px-3 py-2 text-left transition active:scale-[0.99] sm:min-h-[4.5rem] sm:py-2.5',
+              'group flex min-h-[2.5rem] w-full items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition active:scale-[0.99]',
               pedidosNavActive('/pedidos/compras-producto')
-                ? 'border-[#D32F2F]/18 bg-[#FFF7F5] shadow-[0_4px_16px_rgba(211,47,47,0.08)] ring-1 ring-[#D32F2F]/10'
-                : 'border-zinc-200/80 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] ring-1 ring-zinc-200/70',
+                ? 'border-[#D32F2F]/18 bg-[#FFF7F5] ring-1 ring-[#D32F2F]/10'
+                : 'border-zinc-200/80 bg-white ring-1 ring-zinc-200/70',
             ].join(' ')}
           >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200/70">
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-sky-50 text-sky-700 ring-1 ring-sky-200/70">
               <LineChart className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block font-serif text-[15px] leading-tight text-zinc-950">
-                Consumo de artículos por semana
-              </span>
-            </span>
+            <span className="min-w-0 flex-1 text-[12px] font-black leading-tight text-zinc-900">Consumo semanal</span>
             <ChevronRight className="h-4 w-4 shrink-0 text-zinc-300 transition group-hover:translate-x-0.5 group-hover:text-zinc-400" strokeWidth={2.25} aria-hidden />
           </Link>
         </nav>
-      </section>
+      </details>
 
       {avisoPedido === 'enviado' ? (
         <div
@@ -5893,11 +5890,10 @@ export default function PedidosPage() {
         mode="sheet"
         open={ocrOrder != null}
         relatedOrderId={ocrOrder?.id ?? null}
-        skipRedirect
         onClose={() => setOcrOrder(null)}
-        onCreated={(deliveryNoteId) => {
+        onCreated={() => {
           dispatchPedidosDataChanged();
-          setMessage(`Albarán guardado en pedidos y albaranes. ID: ${deliveryNoteId.slice(0, 8)}…`);
+          setMessage('Albarán creado. Abriendo revisión…');
         }}
       />
 

@@ -1050,8 +1050,12 @@ export default function ProveedoresPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return setMessage('Supabase no disponible en esta sesión.');
     void deleteSupplier(supabase, localId, supplierId)
-      .then(() => {
-        setMessage('Proveedor eliminado.');
+      .then((result) => {
+        setMessage(
+          result.mode === 'deactivated'
+            ? 'Este proveedor tiene histórico. Se desactivará para conservar trazabilidad.'
+            : 'Proveedor eliminado.',
+        );
         setShowDeletedBanner(true);
         if (deletedBannerTimeoutRef.current) window.clearTimeout(deletedBannerTimeoutRef.current);
         deletedBannerTimeoutRef.current = window.setTimeout(() => {
@@ -1061,7 +1065,10 @@ export default function ProveedoresPage() {
         reload();
         dispatchPedidosDataChanged();
       })
-      .catch((err: Error) => setMessage(`No se pudo eliminar proveedor: ${err.message}`));
+      .catch((err: Error) => {
+        if (process.env.NODE_ENV === 'development') console.error('[Pedidos proveedores] delete supplier failed:', err);
+        setMessage('No se pudo actualizar el proveedor. Inténtalo de nuevo.');
+      });
     })();
   };
 

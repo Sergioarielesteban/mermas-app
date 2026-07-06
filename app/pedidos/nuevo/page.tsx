@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarDays, Filter, Package, Search } from 'lucide-react';
+import { CalendarDays, Search } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import React from 'react';
 import { useAuth } from '@/components/AuthProvider';
@@ -1569,46 +1569,19 @@ export default function NuevoPedidoPage() {
         className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/85"
       >
         {selectedSupplier && supplierProducts.length > 0 ? (
-          <div className="flex items-end gap-0 overflow-x-auto border-b border-zinc-100 px-1.5 pt-1.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-2.5">
-            <button
-              type="button"
-              onClick={() => setCatalogTab('all')}
-              className={[
-                'inline-flex shrink-0 items-center gap-0.5 border-b-2 px-2 pb-1.5 pt-0.5 text-[10px] font-semibold transition-colors active:opacity-90 sm:gap-1 sm:px-2.5 sm:text-[11px]',
-                catalogTab === 'all'
-                  ? 'border-[#E30613] text-[#E30613]'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-700',
-              ].join(' ')}
-            >
-              <Package className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" strokeWidth={2} aria-hidden />
-              Todos
-            </button>
-          </div>
-        ) : null}
-        {selectedSupplier && supplierProducts.length > 0 ? (
-          <div className="border-b border-zinc-100 bg-white px-2.5 pb-1.5 pt-1.5 sm:px-3">
-            <div className="flex gap-1.5">
-              <div className="relative min-w-0 flex-1">
-                <Search
-                  className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
-                  aria-hidden
-                />
-                <input
-                  id="pedido-nuevo-buscar"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar producto…"
-                  className="h-9 w-full rounded-lg border-0 bg-zinc-50 py-1.5 pl-9 pr-2.5 text-[13px] text-zinc-900 shadow-inner shadow-zinc-100 ring-1 ring-zinc-200/70 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-[#E30613]/20"
-                />
-              </div>
-              <button
-                type="button"
-                className="inline-flex h-9 shrink-0 items-center gap-0.5 rounded-lg border border-zinc-200 bg-white px-2 text-[10px] font-semibold text-zinc-700 shadow-sm hover:bg-zinc-50 sm:gap-1 sm:px-2.5 sm:text-[11px]"
-                aria-label="Filtros (próximamente)"
-              >
-                <Filter className="h-3.5 w-3.5 sm:h-4 sm:w-4" aria-hidden />
-                <span className="hidden sm:inline">Filtros</span>
-              </button>
+          <div className="border-b border-zinc-100 bg-white px-2.5 py-1.5 sm:px-3">
+            <div className="relative min-w-0">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400"
+                aria-hidden
+              />
+              <input
+                id="pedido-nuevo-buscar"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar producto…"
+                className="h-9 w-full rounded-lg border-0 bg-zinc-50 py-1.5 pl-9 pr-2.5 text-[13px] text-zinc-900 shadow-inner shadow-zinc-100 ring-1 ring-zinc-200/70 placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-[#E30613]/20"
+              />
             </div>
           </div>
         ) : null}
@@ -1643,41 +1616,18 @@ export default function NuevoPedidoPage() {
         </div>
       </section>
 
-      <section className="rounded-xl bg-white p-3 ring-1 ring-zinc-200/90">
-        <label className="block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Notas</label>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={3}
-          className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-500 outline-none"
-          placeholder="Observaciones del pedido..."
-        />
-      </section>
-
       <section
         id="pedido-nuevo-acciones"
         className="rounded-xl border border-zinc-200/90 bg-white p-2.5 ring-1 ring-zinc-100 scroll-mt-24"
       >
-        <p className="mb-2 text-[10px] leading-snug text-zinc-600">
-          Pedido realizado por:{' '}
-          <span className="font-bold text-zinc-900">{requesterResolvedName}</span>
-        </p>
-        <div className="rounded-lg bg-zinc-50 p-1.5 ring-1 ring-zinc-200/90">
-          <div className="flex items-center justify-between text-xs text-zinc-700">
-            <span>Subtotal</span>
-            <span className="tabular-nums">{totalBase.toFixed(2)} €</span>
-          </div>
-          <div className="mt-0.5 flex items-center justify-between text-xs text-zinc-700">
-            <span>IVA</span>
-            <span className="tabular-nums">{totalVat.toFixed(2)} €</span>
-          </div>
-          <div className="mt-0.5 flex items-center justify-between text-sm font-black text-zinc-900">
-            <span>Total</span>
-            <span className="tabular-nums">{total.toFixed(2)} €</span>
-          </div>
+        <div className="flex items-center justify-between gap-3 rounded-lg bg-zinc-50 px-2.5 py-2 ring-1 ring-zinc-200/90">
+          <span className="text-[11px] font-semibold text-zinc-600">
+            {items.length} producto{items.length === 1 ? '' : 's'}
+          </span>
+          <span className="text-sm font-black tabular-nums text-zinc-900">{total.toFixed(2)} €</span>
         </div>
         {message ? <p className="mt-1.5 text-sm text-[#B91C1C]">{message}</p> : null}
-        <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+        <div className="mt-1.5 grid grid-cols-[0.8fr_1fr_1.2fr] gap-1.5">
           <button
             type="button"
             onClick={() => {
@@ -1697,7 +1647,7 @@ export default function NuevoPedidoPage() {
             onClick={() => saveDraft('draft')}
             className="h-10 rounded-lg bg-[#D32F2F] text-xs font-bold text-white"
           >
-            {editingId ? 'Guardar cambios' : 'Guardar borrador'}
+            {editingId ? 'Guardar' : 'Borrador'}
           </button>
           <button
             type="button"

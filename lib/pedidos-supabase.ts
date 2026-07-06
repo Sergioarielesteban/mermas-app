@@ -1121,13 +1121,67 @@ export async function updateSupplier(
   return data as SupplierRow;
 }
 
-export async function deleteSupplier(supabase: SupabaseClient, localId: string, supplierId: string) {
+function isMissingSupabaseRelationError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    (m.includes('does not exist') || m.includes('schema cache') || m.includes('could not find')) &&
+    (m.includes('relation') || m.includes('table') || m.includes('delivery_notes') || m.includes('historico_precios'))
+  );
+}
+
+async function hasSupplierRows(
+  supabase: SupabaseClient,
+  table: string,
+  localId: string,
+  supplierColumn: string,
+  supplierId: string,
+): Promise<boolean> {
+  const { count, error } = await supabase
+    .from(table)
+    .select('id', { count: 'exact', head: true })
+    .eq('local_id', localId)
+    .eq(supplierColumn, supplierId);
+  if (error) {
+    if (isMissingSupabaseRelationError(error.message)) return false;
+    throw new Error(error.message);
+  }
+  return (count ?? 0) > 0;
+}
+
+export async function deleteSupplier(
+  supabase: SupabaseClient,
+  localId: string,
+  supplierId: string,
+): Promise<{ mode: 'deleted' | 'deactivated' }> {
+  const hasUsage = await Promise.all([
+    hasSupplierRows(supabase, 'purchase_orders', localId, 'supplier_id', supplierId),
+    hasSupplierRows(supabase, 'pedido_supplier_products', localId, 'supplier_id', supplierId),
+    hasSupplierRows(supabase, 'delivery_notes', localId, 'supplier_id', supplierId),
+    hasSupplierRows(supabase, 'historico_precios', localId, 'proveedor_id', supplierId),
+  ]).then((checks) => checks.some(Boolean));
+
+  if (hasUsage) {
+    const { error } = await supabase
+      .from('pedido_suppliers')
+      .update({ is_active: false })
+      .eq('id', supplierId)
+      .eq('local_id', localId);
+    if (error) {
+      if (isMissingSupabaseColumn(error.message, 'is_active')) {
+        throw new Error('No se pudo desactivar el proveedor.');
+      }
+      throw new Error(error.message);
+    }
+    return { mode: 'deactivated' };
+  }
+
   const { error } = await supabase
     .from('pedido_suppliers')
     .delete()
     .eq('id', supplierId)
     .eq('local_id', localId);
   if (error) throw new Error(error.message);
+  return { mode: 'deleted' };
 }
 
 function normalizePackRecipeFields(input: { unitsPerPack?: number; recipeUnit?: Unit | null }) {

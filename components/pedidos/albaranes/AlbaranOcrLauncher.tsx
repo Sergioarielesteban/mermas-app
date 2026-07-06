@@ -81,6 +81,15 @@ function validateOcrFile(file: File): string | null {
   return null;
 }
 
+function operationalOcrErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : '';
+  if (process.env.NODE_ENV === 'development') {
+    console.error('[Pedidos OCR] process failed:', error);
+  }
+  if (raw.toLowerCase().includes('sesión')) return 'Sesión no válida. Vuelve a iniciar sesión.';
+  return 'No se pudo procesar el albarán. Revisa el documento manualmente.';
+}
+
 type LauncherMode = 'sheet' | 'inline';
 
 type Props = {
@@ -181,6 +190,10 @@ export default function AlbaranOcrLauncher({
         return;
       }
 
+      let createdNoteId: string | null = null;
+      let uploadedOriginal: Awaited<ReturnType<typeof uploadDeliveryNoteOriginal>> | null = null;
+      let ocrStartedAt: number | null = null;
+
       try {
         setPhase({ kind: 'create' });
         const note = await insertDeliveryNote(supabase, localId, {
@@ -191,9 +204,11 @@ export default function AlbaranOcrLauncher({
           sourceType: 'manual',
           createdBy: userId ?? null,
         });
+        createdNoteId = note.id;
 
         setPhase({ kind: 'upload' });
         const uploaded = await uploadDeliveryNoteOriginal(supabase, localId, note.id, file);
+        uploadedOriginal = uploaded;
 
         const isPdf = file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf');
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -202,6 +217,7 @@ export default function AlbaranOcrLauncher({
         }
         const accessToken = sessionData.session.access_token;
         const t0 = Date.now();
+        ocrStartedAt = t0;
 
         setPhase({ kind: 'ocr' });
         let bodyBlob: Blob;
@@ -223,15 +239,10 @@ export default function AlbaranOcrLauncher({
         });
 
         if (!res.ok) {
-          const parts = [
-            res.reason || res.error,
-            res.hint,
-            res.googleCode !== undefined ? `(código Google: ${res.googleCode})` : null,
-            res.error === 'ocr_provider_not_configured' || res.status === 503
-              ? 'Abre /api/ocr/diagnose con sesión iniciada o revisa Vercel: GOOGLE_CLOUD_PROJECT_ID, GOOGLE_DOCUMENT_AI_LOCATION, GOOGLE_DOCUMENT_AI_PROCESSOR_ID, GOOGLE_SERVICE_ACCOUNT_JSON, GEMINI_API_KEY.'
-              : null,
-          ].filter(Boolean);
-          throw new Error(parts.join(' '));
+          if (process.env.NODE_ENV === 'development') {
+            console.error('[Pedidos OCR] provider failed:', res);
+          }
+          throw new Error('ocr_failed');
         }
 
         const payload: AlbaranOcrPayload = res.payload;
@@ -302,12 +313,43 @@ export default function AlbaranOcrLauncher({
           setTimeout(reset, 500);
         }
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'No se pudo procesar el albarán.';
-        if (msg.includes('does not exist')) {
-          setError('Ejecuta en Supabase: supabase-pedidos-delivery-notes.sql');
-        } else {
-          setError(msg);
+        if (createdNoteId) {
+          const msg = operationalOcrErrorMessage(e);
+          try {
+            await updateDeliveryNote(supabase, localId, createdNoteId, {
+              ...(uploadedOriginal
+                ? {
+                    originalStoragePath: uploadedOriginal.storagePath,
+                    originalMimeType: uploadedOriginal.mimeType,
+                    originalFileName: uploadedOriginal.fileName,
+                  }
+                : {}),
+              ocrStatus: 'failed',
+              sourceType: 'ocr',
+              status: 'pending_review',
+              notes: msg,
+            });
+            await insertDeliveryNoteOcrRun(supabase, localId, createdNoteId, '', {
+              errorMessage: e instanceof Error ? e.message : 'ocr_failed',
+              durationMs: ocrStartedAt != null ? Date.now() - ocrStartedAt : null,
+              createdBy: userId ?? null,
+            }).catch((err) => {
+              if (process.env.NODE_ENV === 'development') console.error('[Pedidos OCR] failed to store OCR run:', err);
+            });
+            setPhase({ kind: 'done' });
+            onCreated?.(createdNoteId);
+            if (mode === 'sheet') onClose?.();
+            if (!skipRedirect) {
+              router.push(`/pedidos/albaranes/${createdNoteId}`);
+            } else {
+              setError(msg);
+            }
+            return;
+          } catch (recoverErr) {
+            if (process.env.NODE_ENV === 'development') console.error('[Pedidos OCR] recovery failed:', recoverErr);
+          }
         }
+        setError(operationalOcrErrorMessage(e));
         setPhase({ kind: 'idle' });
       }
     },

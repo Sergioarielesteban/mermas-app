@@ -32,12 +32,10 @@ export async function syncCatalogPricesFromValidatedDeliveryNote(
   });
 
   if (error) {
-    if (error.message.toLowerCase().includes('confirm_delivery_note_atomic')) {
-      throw new Error(
-        'Falta la función SQL confirm_delivery_note_atomic en Supabase. Ejecuta supabase-pedidos-critical-operations.sql y vuelve a intentar.',
-      );
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[Pedidos albaranes] confirm_delivery_note_atomic failed:', error);
     }
-    throw new Error(error.message);
+    throw new Error('No se pudo confirmar el albarán.');
   }
 
   const row = Array.isArray(data) ? data[0] : data;
