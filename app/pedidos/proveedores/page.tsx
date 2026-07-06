@@ -5,7 +5,6 @@ import React from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   Beef,
-  CalendarDays,
   ChevronRight,
   Coffee,
   Droplets,
@@ -20,7 +19,6 @@ import {
   Power,
   Snowflake,
   Sparkles,
-  Trash2,
   Truck,
 } from 'lucide-react';
 import { ProveedoresModalShell } from '@/components/pedidos/ProveedoresModalShell';
@@ -1222,16 +1220,12 @@ export default function ProveedoresPage() {
                   {supplier.products.length}
                 </span>
               </span>
-              <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] leading-tight text-zinc-500">
-                <span className="inline-flex min-w-0 items-center gap-1">
-                  <Phone className="h-3 w-3 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
-                  <span className="truncate">{supplier.contact || '—'}</span>
-                </span>
-                <span className="inline-flex min-w-0 items-center gap-1">
-                  <CalendarDays className="h-3 w-3 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
-                  <span className="truncate">{formatDeliveryCycleSummary(supplier.deliveryCycleWeekdays ?? [])}</span>
-                </span>
-              </span>
+	              <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] leading-tight text-zinc-500">
+	                <span className="inline-flex min-w-0 items-center gap-1">
+	                  <Phone className="h-3 w-3 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
+	                  <span className="truncate">{supplier.contact || '—'}</span>
+	                </span>
+	              </span>
             </span>
             <span className="flex shrink-0 items-center gap-1.5 pl-1">
               <span className="hidden rounded-full bg-[#FFF7F5] px-2 py-0.5 text-[10px] font-medium text-[#B91C1C] ring-1 ring-[#D32F2F]/15 min-[390px]:inline">
@@ -1271,18 +1265,26 @@ export default function ProveedoresPage() {
                     setEditingSupplierId(supplier.id);
                   }}
                 />
-                <ToolbarButton icon={PackagePlus} label="Producto" onClick={() => openAddProductForSupplier(supplier.id)} />
-                <ToolbarButton
-                  icon={Trash2}
-                  label="Eliminar"
-                  tone="danger"
-                  onClick={() => removeSupplier(supplier.id, supplier.name)}
-                />
-              </div>
+	                <ToolbarButton icon={PackagePlus} label="Añadir producto" onClick={() => openAddProductForSupplier(supplier.id)} />
+	                <ToolbarButton
+	                  icon={Power}
+	                  label="Desactivar"
+	                  tone="danger"
+	                  onClick={() => removeSupplier(supplier.id, supplier.name)}
+	                />
+		              </div>
 
-              <div className="mt-2 space-y-1.5">
-            {[...supplier.products]
-              .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+	              <details className="group mt-2 rounded-[16px] border border-zinc-200/70 bg-zinc-50/50 ring-1 ring-zinc-100/70 [&_summary::-webkit-details-marker]:hidden">
+	                <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-2 text-[12px] font-semibold text-zinc-800">
+	                  <span>Productos asociados</span>
+	                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-zinc-500">
+	                    {supplier.products.length} producto{supplier.products.length === 1 ? '' : 's'}
+	                    <ChevronRight className="h-3.5 w-3.5 transition group-open:rotate-90" strokeWidth={2.25} aria-hidden />
+	                  </span>
+	                </summary>
+	              <div className="space-y-1.5 border-t border-zinc-100 px-2 pb-2 pt-1.5">
+	            {[...supplier.products]
+	              .sort((a, b) => a.name.localeCompare(b.name, 'es'))
               .map((p) => (
               <div key={p.id} className="rounded-[16px] border border-zinc-200/70 bg-[#fffdf8] px-2.5 py-2 shadow-[0_5px_14px_rgba(15,23,42,0.03)] ring-1 ring-zinc-100/60">
                 <div className="flex flex-col gap-1.5">
@@ -1416,9 +1418,10 @@ export default function ProveedoresPage() {
                 </div>
               </div>
               ))}
-              </div>
-            </div>
-          ) : null}
+	              </div>
+	              </details>
+	            </div>
+	          ) : null}
         </section>
         );
         })}
@@ -1749,8 +1752,13 @@ export default function ProveedoresPage() {
                   />
                 </label>
               </div>
-              <div>
-                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Días de reparto</p>
+	              <details className="rounded-[18px] border border-zinc-200/70 bg-white/80 ring-1 ring-zinc-100/80 [&_summary::-webkit-details-marker]:hidden">
+	                <summary className="cursor-pointer list-none px-3 py-2 text-[12px] font-medium text-zinc-800">
+	                  Ciclo de reparto <span className="font-normal text-zinc-500">{formatDeliveryCycleSummary(editSup.deliveryCycleWeekdays ?? [])}</span>
+	                </summary>
+	                <div className="space-y-3 border-t border-zinc-100 px-3 pb-3 pt-2">
+	              <div>
+	                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">Días de reparto</p>
                 <p className="mt-0.5 text-[10px] text-zinc-500">
                   Ninguno marcado = objetivo semanal completo (7 días). Marca 2 días (ej. L y J) para tramos Lun–Mié y
                   Jue–Dom en Nuevo pedido.
@@ -1868,12 +1876,14 @@ export default function ProveedoresPage() {
                 ) : (
                   <p className="mt-2 text-[10px] text-zinc-500">Sin excepciones guardadas.</p>
                 )}
-              </div>
+	              </div>
+	                </div>
+	              </details>
 
-              <details className="rounded-[18px] border border-zinc-200/70 bg-white/80 ring-1 ring-zinc-100/80 [&_summary::-webkit-details-marker]:hidden">
-                <summary className="cursor-pointer list-none px-3 py-2 text-[12px] font-medium text-zinc-800">
-                  Agenda de pedido <span className="font-normal text-zinc-500">(opcional)</span>
-                </summary>
+	              <details className="rounded-[18px] border border-zinc-200/70 bg-white/80 ring-1 ring-zinc-100/80 [&_summary::-webkit-details-marker]:hidden">
+	                <summary className="cursor-pointer list-none px-3 py-2 text-[12px] font-medium text-zinc-800">
+	                  Agenda de pedido <span className="font-normal text-zinc-500">(opcional)</span>
+	                </summary>
                 <div className="space-y-3 border-t border-zinc-100 px-3 pb-3 pt-2">
                   <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-zinc-800">
                     <input

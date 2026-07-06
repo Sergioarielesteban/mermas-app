@@ -1005,12 +1005,15 @@ function ArticleCard({
             <p className="rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-900">{activoErr}</p>
           ) : null}
 
-          <section className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80">
-            <h3 className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
-              <LineChart className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
-              Coste master
-            </h3>
-            <dl className="mt-2 grid grid-cols-2 gap-1.5 text-sm sm:grid-cols-4">
+	          <details className="group rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80 [&_summary::-webkit-details-marker]:hidden">
+	            <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+	              <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
+	                <LineChart className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
+	                Configuración avanzada
+	              </span>
+	              <ChevronDown className="h-4 w-4 text-zinc-400 transition group-open:rotate-180" aria-hidden />
+	            </summary>
+	            <dl className="mt-2 grid grid-cols-2 gap-1.5 text-sm sm:grid-cols-4">
               <div className="rounded-xl bg-zinc-50 p-2 ring-1 ring-zinc-100">
                 <dt className="text-[10px] font-black uppercase tracking-wide text-zinc-400">Importe master</dt>
                 <dd className="mt-0.5 text-base font-black tabular-nums text-zinc-950">
@@ -1051,7 +1054,7 @@ function ArticleCard({
                 <strong>{formatMoneyEur(roundMoney(master!))}</strong>. Revisa coherencia antes de usarlo en fichas.
               </p>
             ) : null}
-          </section>
+	          </details>
 
           <section className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80">
             <h3 className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">Compra y uso en cocina</h3>
@@ -1211,10 +1214,16 @@ function ArticleCard({
             </div>
           </section>
 
-          <section className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80">
-            <h3 className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
-              Formatos de uso en cocina
-            </h3>
+	          <details className="group rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80 [&_summary::-webkit-details-marker]:hidden">
+	            <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+	              <span className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
+	                Formatos de uso
+	              </span>
+	              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-zinc-500">
+	                {usageFormats.length} formato{usageFormats.length === 1 ? '' : 's'}
+	                <ChevronDown className="h-4 w-4 text-zinc-400 transition group-open:rotate-180" aria-hidden />
+	              </span>
+	            </summary>
             {formatMsg ? (
               <p className="mt-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-950">
                 {formatMsg}
@@ -1364,13 +1373,16 @@ function ArticleCard({
                 </button>
               </div>
             </div>
-          </section>
+	          </details>
 
-          <section className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80">
-            <h3 className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
-              <Paperclip className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
-              Técnica y documentación
-            </h3>
+	          <details className="group rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80 [&_summary::-webkit-details-marker]:hidden">
+	            <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+	              <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
+	                <Paperclip className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
+	                {technicalPath ? 'Ver documentación' : 'Añadir documento'}
+	              </span>
+	              <ChevronDown className="h-4 w-4 text-zinc-400 transition group-open:rotate-180" aria-hidden />
+	            </summary>
             {docMsg ? (
               <p className="mt-1.5 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-950">
                 {docMsg}
@@ -1458,33 +1470,16 @@ function ArticleCard({
                 </div>
               </div>
             )}
-          </section>
+	          </details>
 
-          <section className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80">
-            <h3 className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
-              Impacto en ficha técnica
-            </h3>
-            <dl className="mt-2 grid grid-cols-3 gap-1.5 text-center">
-              <div className="rounded-xl bg-zinc-50 px-2 py-2 ring-1 ring-zinc-100">
-                <dt className="text-[9px] font-black uppercase text-zinc-400">Escandallos</dt>
-                <dd className="mt-0.5 text-sm font-black text-emerald-700">Sí</dd>
-              </div>
-              <div className="rounded-xl bg-zinc-50 px-2 py-2 ring-1 ring-zinc-100">
-                <dt className="text-[9px] font-black uppercase text-zinc-400">Mermas</dt>
-                <dd className="mt-0.5 text-sm font-black text-zinc-400">—</dd>
-              </div>
-              <div className="rounded-xl bg-zinc-50 px-2 py-2 ring-1 ring-zinc-100">
-                <dt className="text-[9px] font-black uppercase text-zinc-400">Comida</dt>
-                <dd className="mt-0.5 text-sm font-black text-zinc-400">—</dd>
-              </div>
-            </dl>
-          </section>
-
-          <section className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80">
-            <h3 className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
-              <GitCompare className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
-              Comparativa por proveedor
-            </h3>
+	          <details className="group rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80 [&_summary::-webkit-details-marker]:hidden">
+	            <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+	              <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
+	                <GitCompare className="h-3.5 w-3.5 text-[#D32F2F]" aria-hidden />
+	                Comparativa por proveedor
+	              </span>
+	              <ChevronDown className="h-4 w-4 text-zinc-400 transition group-open:rotate-180" aria-hidden />
+	            </summary>
             {compareRows.length === 0 ? (
               <p className="mt-2 text-xs text-zinc-500">Sin datos de catálogo.</p>
             ) : (
@@ -1561,7 +1556,27 @@ function ArticleCard({
                 {formatMoneyEur(roundMoney(minCatalog))} – {formatMoneyEur(roundMoney(maxCatalog))} · {compareRows.length} líneas
               </p>
             ) : null}
-          </section>
+	          </details>
+
+	          <section className="rounded-2xl bg-white p-2.5 shadow-sm ring-1 ring-zinc-200/80">
+	            <h3 className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
+	              Impacto
+	            </h3>
+	            <dl className="mt-2 grid grid-cols-3 gap-1.5 text-center">
+	              <div className="rounded-xl bg-zinc-50 px-2 py-2 ring-1 ring-zinc-100">
+	                <dt className="text-[9px] font-black uppercase text-zinc-400">Escandallos</dt>
+	                <dd className="mt-0.5 text-sm font-black text-emerald-700">Sí</dd>
+	              </div>
+	              <div className="rounded-xl bg-zinc-50 px-2 py-2 ring-1 ring-zinc-100">
+	                <dt className="text-[9px] font-black uppercase text-zinc-400">Mermas</dt>
+	                <dd className="mt-0.5 text-sm font-black text-zinc-400">—</dd>
+	              </div>
+	              <div className="rounded-xl bg-zinc-50 px-2 py-2 ring-1 ring-zinc-100">
+	                <dt className="text-[9px] font-black uppercase text-zinc-400">Comida</dt>
+	                <dd className="mt-0.5 text-sm font-black text-zinc-400">—</dd>
+	              </div>
+	            </dl>
+	          </section>
 
           <section className="rounded-2xl bg-white p-2 shadow-sm ring-1 ring-zinc-200/80">
             <div className="grid grid-cols-[1fr_auto] gap-2">
