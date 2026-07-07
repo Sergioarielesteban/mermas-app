@@ -1265,6 +1265,7 @@ export default function NuevoPedidoPage() {
       items,
       contentRevisedAfterSent: markRevWhatsapp || Boolean(hadContentRevisionFlag),
     });
+    openWhatsAppMessage(phone, whatsappMessage);
     void saveOrder(supabase, localId, {
       orderId: existingOrderId ?? undefined,
       supplierId: selectedSupplier.id,
@@ -1298,7 +1299,6 @@ export default function NuevoPedidoPage() {
       })),
     })
       .then((orderId) => {
-        openWhatsAppMessage(phone, whatsappMessage);
         const supa = getSupabaseClient();
         if (supa && localId && selectedSupplier) {
           void notifyPedidoEnviado(supa, {
